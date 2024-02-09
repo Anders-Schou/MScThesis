@@ -10,4 +10,4 @@ module purge
 module load python3/3.12.1
 
 # Activate virtual environment
-. ~/venv_MSc/bin/activate
+. ~/.venv/venv_MSc/bin/activate

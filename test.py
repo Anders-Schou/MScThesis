@@ -1,5 +1,7 @@
 import jax
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
 
 def f(x):
     u = x[0]**2 + x[1]**3
@@ -13,3 +15,6 @@ g = jax.grad(f)
 print(b)
 print(g(v))
 print(jax.devices())
+
+plt.scatter(np.linspace(0, 5, 51), np.random.rand(51))
+plt.savefig("testfig2.pdf", format="pdf")
