@@ -1,0 +1,19 @@
+models                      # Contains the larger parts of the models
+    networks.py             # Definitions of networks and network architectures
+    pinn.py                 # PINN classes with training methods, etc.
+    deeponet.py             # DeepONet classes with training methods, etc.
+    loss_functions.py       # Definitions of loss functions
+
+datahandlers:               # Dataclasses for parameters?
+                            # Data setup functions
+                            # IO functions
+
+setup:                      # Functions for preparing settings and data \
+                            # and set up models for training/evaluating.
+
+plotting:                   # Functions for visualizing models, data and results
+
+examples:                   # Contains subfolders with various cases
+    rect_circ_hole          # Main script for running and training model on this problem
+
+utils:                      # Misc. functions
