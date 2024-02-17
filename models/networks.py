@@ -1,13 +1,26 @@
 from dataclasses import dataclass
-import jax
+from collections.abc import Callable
+
 import jax.numpy as jnp
 import flax.linen as nn
 
+from utils.datastructures import MLPArch
+from setup.parsers import parse_MLP_settings
+
+def setup_network(network_settings: dict):
+    arch = network_settings["architecture"].lower()
+    if  arch == "mlp":
+        parsed_settings = parse_MLP_settings(network_settings["specifications"])
+        return MLP(**parsed_settings)
+    raise ValueError(f"Invalid network architecture: '{arch}'")
+
 @dataclass
 class MLP(nn.Module):
-    num_neurons_per_layer: list[int]
-    activation: callable
-    weight_init: callable = nn.initializers.glorot_uniform()
+    input_dim: int
+    output_dim: int
+    hidden_dims: list[int]
+    activation: list[Callable]
+    initialization: list[Callable]
     
     @nn.compact
     def __call__(self, input, transform=None):
@@ -17,10 +30,11 @@ class MLP(nn.Module):
         else:
             x = input
 
-        for i, feats in enumerate(self.num_neurons_per_layer[1:-1]):
-            x = nn.Dense(features=feats, kernel_init=self.weight_init, name=f"MLP_linear{i}")(x)
-            x = self.activation(x)
+        for i, feats in enumerate(self.hidden_dims):
+            x = nn.Dense(features=feats, kernel_init=self.initialization[i](), name=f"MLP_linear{i}")(x)
+            x = self.activation[i](x)
 
-        x = nn.Dense(features=self.num_neurons_per_layer[-1], kernel_init=self.weight_init, name=f"MLP_linear_output")(x)
+        x = nn.Dense(features=self.output_dim, kernel_init=self.initialization[-1](), name=f"MLP_linear_output")(x)
 
         return x
+    
