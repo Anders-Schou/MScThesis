@@ -12,11 +12,11 @@ def settings2dict(settings: Settings) -> dict:
     return settings.__dict__
 
 
-class SettingsInterpretationException(Exception):
+class SettingsInterpretationError(Exception):
     pass
 
 
-class SettingsNotSupported(Exception):
+class SettingsNotSupportedError(Exception):
     pass
 
 

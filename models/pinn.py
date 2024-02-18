@@ -1,16 +1,14 @@
-from dataclasses import dataclass
 from functools import partial
 from collections.abc import Callable
 
-from models.networks import MLP
 import jax
-import jax.numpy as jnp
-import flax.linen as nn
-from jax import grad
 import optax
+import jax.numpy as jnp
+
+from models.networks import MLP
 
 
-class Pinn:
+class PINN:
     net: MLP
     loss_fn: Callable
     optimizer: Callable

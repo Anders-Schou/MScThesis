@@ -4,8 +4,8 @@ from collections.abc import Callable
 
 import flax.linen as nn
 
-from setup.settings import MLPSettings, SupportedActivations, settings2dict
-from setup.settings import SettingsInterpretationException, SettingsNotSupported
+from setup.settings import (settings2dict, MLPSettings, SupportedActivations,
+    SettingsInterpretationError, SettingsNotSupportedError)
 
 def load_json(path: str):
     f = open(path, "r")
@@ -47,7 +47,7 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
         if hasattr(settings, key):
             setattr(settings, key, value)
         else:
-            raise SettingsInterpretationException(
+            raise SettingsInterpretationError(
                 f"Error: '{key}' is not a valid setting.")
     
     # Ensure hidden_dims is a list
@@ -58,27 +58,26 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     # List of activations should have same length as hidden_dims
     if isinstance(settings.activation, list):
         if len(settings.activation) != num_hidden:
-            raise SettingsInterpretationException(
+            raise SettingsInterpretationError(
                  "List of activation functions does not correspond to number of hidden layers.")
     else:
         settings.activation = [settings.activation] * num_hidden
     for a in settings.activation:
         if not isinstance(a, str):
-            raise SettingsInterpretationException(
+            raise SettingsInterpretationError(
                 "Wrong type for initialization setting.")
     settings.activation = convert_activation(settings.activation)
     
     # List of initializations should have length = len(hidden_dims) + 1
     if isinstance(settings.initialization, list):
-        print(settings.initialization)
         if len(settings.initialization) != num_hidden + 1:
-            raise SettingsInterpretationException(
+            raise SettingsInterpretationError(
                  "List of weight initializations does not correspond to number of hidden layers.")
     else:
         settings.initialization = [settings.initialization] * (num_hidden + 1)
     for i in settings.initialization:
         if not isinstance(i, str):
-            raise SettingsInterpretationException(
+            raise SettingsInterpretationError(
                 "Wrong type for initialization setting.")
     settings.initialization = convert_initialization(settings.initialization)
     
@@ -92,7 +91,7 @@ def convert_activation(act_str: list[str]) -> list[Callable]:
         try:
             act_fun.append(getattr(supported_activations, a))
         except Exception as err:
-            raise SettingsNotSupported(f"Activation function '{a} is not supported.") from err
+            raise SettingsNotSupportedError(f"Activation function '{a} is not supported.") from err
     return act_fun
 
 
@@ -102,7 +101,7 @@ def convert_initialization(init_str: list[str]) -> list[Callable]:
         try:
             init_fun.append(getattr(nn.initializers, i))
         except Exception as err:
-            raise SettingsNotSupported(f"Initialization '{i} is not supported.") from err
+            raise SettingsNotSupportedError(f"Initialization '{i} is not supported.") from err
     return init_fun
 
 
