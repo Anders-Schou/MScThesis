@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from collections.abc import Callable
 
+import jax
 import jax.numpy as jnp
 import flax.linen as nn
 
@@ -68,6 +69,11 @@ class SupportedEquations:
     #
     # (file 'equations' does not exists at the moment)
     pass
+
+
+@dataclass
+class SupportedSamplingDistributions:
+    uniform: Callable = jax.random.uniform
 
 
 class Model:

@@ -2,10 +2,12 @@ import json
 import argparse
 from collections.abc import Callable
 
+import jax
 import flax.linen as nn
 
 from setup.settings import (settings2dict, MLPSettings, SupportedActivations,
     SettingsInterpretationError, SettingsNotSupportedError)
+
 
 def load_json(path: str):
     f = open(path, "r")
@@ -105,3 +107,9 @@ def convert_initialization(init_str: list[str]) -> list[Callable]:
     return init_fun
 
 
+def convert_sampling_distribution(dist_str: str) -> Callable:
+    try:
+        dist_fun = getattr(jax.random, dist_str)
+    except Exception as err:
+        raise SettingsNotSupportedError(f"Sampling distribution {dist_str} is not supported.") from err
+    return dist_fun
