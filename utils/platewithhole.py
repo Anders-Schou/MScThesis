@@ -41,24 +41,24 @@ def sigma_rt_true(r, theta, S = 10, a = 2):
     return -0.5*S * (1 - 3 * jnp.square(a2divr2) + 2 * a2divr2) * jnp.sin(2*theta)
 
 
-def polar_stress_true(rt):
+def polar_stress_true(rt, **kwargs):
 
     # Compute polar stresses from analytical solutions
-    rr_stress = sigma_rr_true(rt[0], rt[1])
-    rt_stress = sigma_rt_true(rt[0], rt[1])
-    tt_stress = sigma_tt_true(rt[0], rt[1])
+    rr_stress = sigma_rr_true(rt[0], rt[1], **kwargs)
+    rt_stress = sigma_rt_true(rt[0], rt[1], **kwargs)
+    tt_stress = sigma_tt_true(rt[0], rt[1], **kwargs)
 
     # Format as stress tensor
     return jnp.array([[rr_stress, rt_stress], [rt_stress, tt_stress]])
 
 
-def cart_stress_true(xy):
+def cart_stress_true(xy, **kwargs):
 
     # Map cartesian coordinates to polar coordinates
     rtheta = xy2rtheta(xy)
     
     # Compute true stress tensor in polar coordinates
-    polar_stress_hessian = polar_stress_true(rtheta)
+    polar_stress_hessian = polar_stress_true(rtheta, **kwargs)
 
     # Convert polar stress tensor to cartesian stress tensor
     return polar2cart_tensor(polar_stress_hessian, rtheta)
