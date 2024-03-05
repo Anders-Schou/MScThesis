@@ -6,26 +6,15 @@ from utils.transforms import xy2r, xy2theta, xy2rtheta, polar2cart_tensor, cart2
 from utils.plotting import plot_circle
 
 
-# def true_sol_polar(r, theta, constants):
-#     TENSION, A, B, C, D = constants
-#     r2 = jnp.square(2)
-#     return (TENSION*r2/4 - TENSION*r2*jnp.cos(2*theta)/4) + A*jnp.log(r) + B*theta + C*jnp.cos(2*theta) + D*jnp.divide(jnp.cos(2*theta), r2)
-
-
 def polar_sol_true(r, theta, S = 10, a = 2):
     a2 = a*a
     r2 = jnp.square(r)
-
     A = -S * 0.25
     B = 0
     C = -a2**2 * S * 0.25
     D = a2 * S * 0.5
-
     return (A*r2 + B*r2**2 + C / r2 + D) * jnp.cos(2*theta)
 
-
-# def true_sol_cart(x, y, constants):
-#     return true_sol_polar(xy2r(x, y), xy2theta(x, y), constants)
 
 def cart_sol_true(x, y, **kwargs):
     return polar_sol_true(xy2r(x, y), xy2theta(x, y), **kwargs)
@@ -74,6 +63,14 @@ def cart_stress_true(xy):
     # Convert polar stress tensor to cartesian stress tensor
     return polar2cart_tensor(polar_stress_hessian, rtheta)
 
+
+# def true_sol_cart(x, y, constants):
+#     return true_sol_polar(xy2r(x, y), xy2theta(x, y), constants)
+
+# def true_sol_polar(r, theta, constants):
+#     TENSION, A, B, C, D = constants
+#     r2 = jnp.square(2)
+#     return (TENSION*r2/4 - TENSION*r2*jnp.cos(2*theta)/4) + A*jnp.log(r) + B*theta + C*jnp.cos(2*theta) + D*jnp.divide(jnp.cos(2*theta), r2)
 
 
 # def sigma_xx_true(x, y, tension, radius, mask=True):
