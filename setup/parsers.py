@@ -3,20 +3,26 @@ import argparse
 from collections.abc import Callable
 
 import jax
+import jax.numpy as jnp
 import flax.linen as nn
 
-from setup.settings import (settings2dict, MLPSettings, SupportedActivations,
-    SettingsInterpretationError, SettingsNotSupportedError)
+from setup.settings import (settings2dict, MLPSettings, TrainingSettings,
+                            SupportedActivations, SupportedOptimizers,
+                            SettingsInterpretationError, SettingsNotSupportedError)
 
 
-def load_json(path: str):
-    f = open(path, "r")
+def load_json(path: str) -> dict:
+    try:
+        f = open(path, "r")
+    except FileNotFoundError:
+        print(f"Could not find settings file: '{path}'")
+        exit()
     j = json.loads(f.read())
     f.close()
     return j
 
 
-def parse_arguments():
+def parse_arguments() -> dict:
     parser = argparse.ArgumentParser()
     parser.add_argument("--settings", type=str, required=True)
     args = parser.parse_args()
@@ -86,6 +92,50 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     return settings2dict(settings)
 
 
+def parse_training_settings(settings_dict: dict) -> dict:
+    """
+    Parses settings specified in dictionary.
+    Valid settings include those in the default
+    settings class:
+
+        iterations: int = 1000
+        optimizer: str = "adam"
+        learning_rate: float = 1e-3
+        batch_size: int | None = None
+        decay_rate: float | None = None
+        decay_steps: int | None = None
+        transfer_learning: bool = False
+
+    Raises exception if a setting is unknown,
+    or if theres a mismatch in length of lists
+    of activations, initializations and number
+    of neurons in hidden layers.
+    """
+    # Get default settings
+    settings = TrainingSettings()
+
+    # Load settings from dictionary into settings class
+    for key, value in settings_dict.items():
+        if hasattr(settings, key):
+            setattr(settings, key, value)
+        else:
+            raise SettingsInterpretationError(
+                f"Error: '{key}' is not a valid setting.")
+    
+    settings.optimizer = convert_optimizer(settings.optimizer)
+    
+    return settings2dict(settings)
+
+
+def parse_loss_type(loss_str: str) -> Callable:
+    loss_str = loss_str.lower()
+    if loss_str == "mse":
+        def mse(u: jnp.ndarray, u_true: jnp.ndarray):
+            return jnp.mean(jnp.square(jnp.subtract(u, u_true)))
+        return mse
+    raise ValueError(f"Loss of type '{loss_str}' is not supported.")
+
+
 def convert_activation(act_str: list[str]) -> list[Callable]:
     supported_activations = SupportedActivations()
     act_fun = []
@@ -107,9 +157,18 @@ def convert_initialization(init_str: list[str]) -> list[Callable]:
     return init_fun
 
 
+def convert_optimizer(opt_str: str) -> Callable:
+    supported_optimizers = SupportedOptimizers()
+    try:
+        opt_fun = getattr(supported_optimizers, opt_str)
+    except Exception as err:
+        raise SettingsNotSupportedError(f"Optimizer '{opt_str}' is not supported.") from err
+    return opt_fun
+
+
 def convert_sampling_distribution(dist_str: str) -> Callable:
     try:
         dist_fun = getattr(jax.random, dist_str)
     except Exception as err:
-        raise SettingsNotSupportedError(f"Sampling distribution {dist_str} is not supported.") from err
+        raise SettingsNotSupportedError(f"Sampling distribution '{dist_str}' is not supported.") from err
     return dist_fun

@@ -1,27 +1,66 @@
 import jax.numpy as jnp
 
 
-def cart2polar(sigma_xx: jnp.ndarray,
-               sigma_xy: jnp.ndarray,
-               sigma_yy: jnp.ndarray,
-               theta: jnp.ndarray
-               ):
-    
+def xy2r(x, y):
+    return jnp.sqrt(jnp.add(jnp.square(x), jnp.square(y)))
+
+
+def xy2theta(x, y):
+    return jnp.arctan2(y, x)
+
+
+def xy2rtheta(xy):
+    return jnp.array([xy2r(xy[0], xy[1]), xy2theta(xy[0], xy[1])])
+
+
+def rtheta2x(r, theta):
+    return jnp.multiply(r, jnp.cos(theta))
+
+
+def rtheta2y(r, theta):
+    return jnp.multiply(r, jnp.sin(theta))
+
+
+def rtheta2xy(rtheta):
+    return jnp.array([rtheta[0]*jnp.cos(rtheta[1]), rtheta[0]*jnp.sin(rtheta[1])])
+
+
+def cart2polar_tensor(stresses, xy):
+    theta = xy2theta(xy[0], xy[1])
     costheta = jnp.cos(theta)
     sintheta = jnp.sin(theta)
-    costheta2 = jnp.square(costheta)
-    sintheta2 = jnp.square(sintheta)
-    sincos = jnp.multiply(costheta, sintheta)
+    P = jnp.array([[costheta, sintheta], [-sintheta, costheta]])
+    return P @ stresses @ P.T
 
-    sigma_rr = jnp.multiply(sigma_xx, costheta2) + \
-               jnp.multiply(sigma_yy, sintheta2) + \
-               jnp.multiply(sigma_xy, sincos) * 2
+
+def polar2cart_tensor(stresses, rt):
+    costheta = jnp.cos(rt[1])
+    sintheta = jnp.sin(rt[1])
+    P = jnp.array([[costheta, sintheta], [-sintheta, costheta]])
+    return P.T @ stresses @ P
+
+
+# def cart2polar(sigma_xx: jnp.ndarray,
+#                sigma_xy: jnp.ndarray,
+#                sigma_yy: jnp.ndarray,
+#                theta: jnp.ndarray
+#                ):
     
-    sigma_rt = jnp.multiply(sincos, jnp.subtract(sigma_yy, sigma_xx)) + \
-               jnp.multiply(sigma_xy, jnp.subtract(costheta2, sintheta2))
+#     costheta = jnp.cos(theta)
+#     sintheta = jnp.sin(theta)
+#     costheta2 = jnp.square(costheta)
+#     sintheta2 = jnp.square(sintheta)
+#     sincos = jnp.multiply(costheta, sintheta)
+
+#     sigma_rr = jnp.multiply(sigma_xx, costheta2) + \
+#                jnp.multiply(sigma_yy, sintheta2) + \
+#                jnp.multiply(sigma_xy, sincos) * 2
     
-    sigma_tt = jnp.multiply(sigma_xx, sintheta2) + \
-               jnp.multiply(sigma_yy, costheta2) - \
-               jnp.multiply(sigma_xy, sincos) * 2
+#     sigma_rt = jnp.multiply(sincos, jnp.subtract(sigma_yy, sigma_xx)) + \
+#                jnp.multiply(sigma_xy, jnp.subtract(costheta2, sintheta2))
     
-    return sigma_rr, sigma_rt, sigma_tt
+#     sigma_tt = jnp.multiply(sigma_xx, sintheta2) + \
+#                jnp.multiply(sigma_yy, costheta2) - \
+#                jnp.multiply(sigma_xy, sincos) * 2
+    
+#     return sigma_rr, sigma_rt, sigma_tt

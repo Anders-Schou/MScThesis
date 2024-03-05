@@ -4,6 +4,7 @@ from collections.abc import Callable
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
+import optax
 
 class Settings:
     pass
@@ -41,16 +42,19 @@ class MLPSettings(Settings):
     input_dim: int = 1
     output_dim: int = 1
     hidden_dims: int | list[int] = 32
-    activation: str | list[str] = "tanh"
-    initialization: str | list[str] = "glorot_normal"
+    activation: str | list[str] | Callable | list[Callable] = "tanh"
+    initialization: str | list[str] | Callable | list[Callable] = "glorot_normal"
 
 
 @dataclass
 class TrainingSettings(Settings):
-    iterations: int
-    optimizer: str
-    learning_rate: float
-    batch_size: int
+    iterations: int = 1000
+    optimizer: str | Callable = "adam"
+    learning_rate: float = 1e-3
+    batch_size: int | None = None
+    decay_rate: float | None = None
+    decay_steps: int | None = None
+    transfer_learning: bool = False
 
 
 @dataclass
@@ -59,6 +63,11 @@ class SupportedActivations:
     sigmoid: Callable = nn.sigmoid
     silu: Callable = nn.silu
     swish: Callable = nn.silu
+
+
+@dataclass
+class SupportedOptimizers:
+    adam: Callable = optax.adam
 
 
 @dataclass

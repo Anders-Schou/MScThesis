@@ -1,87 +1,16 @@
+from functools import partial
 from dataclasses import dataclass
 from collections.abc import Sequence
 
 import numpy as np
 import jax
 import jax.numpy as jnp
-from jax.tree_util import tree_map
+from jax import tree_util
 import torch.utils.data
+import flax
 
 from datahandlers.samplers import sample_line
 from utils.utils import limits2vertices
-
-
-
-class Dataset(torch.utils.data.Dataset):
-
-    def __init__(self, data: dict) -> None:
-        # Set data and "labels"
-        # Input structure: One pair for each condition
-        # data  =  {
-        #           "pde": (jnp.ndarray <- collocation points, jnp.ndarray <- RHS if any),
-        #           "xy": (jnp.ndarray <- [x, y, z, ...], jnp.ndarray <- [u_xy(x, y, z, ...), v_xy(x, ...), ...]),
-        #           "xx": (jnp.ndarray <-   ---||---    , jnp.ndarray <-   ---||---                       ),
-        #           .
-        #           .
-        #           .
-        #           "val", (jnp.ndarray <- x_val, jnp.ndarray <- u_val)
-        #           }
-        #
-        self.data = data
-        pass
-    
-    def __len__(self):
-        # Define "length" of dataset
-        return 150
-
-    def __getitem__(self, index):
-        # Define which data to fetch based on input index
-        return index, index
-    
-    def __sample_data(self, key):
-        pass
-
-    def __repr__(self):
-        num_points = 5
-        r = 4
-        repr_str = "\n" + "--------" * r + "  DATASET  " + "--------" * r + "\n\n"
-        repr_str += f"Printing first {num_points} data points for each entry:\n\n"
-        for key, (x, u) in self.data.items():
-            n = min(len(x), num_points)
-            repr_str += (16*r+11) * "-"
-            repr_str += f"\nType: '{key}'"
-            repr_str += "\n\nData points:\n"
-            repr_str += str(x[:n])
-            repr_str += "\n\nFunction values\n"
-            repr_str += str(u[:n])
-            repr_str += "\n\n\n"
-        repr_str += "\n"
-        repr_str += (16*r+11) * "-"
-        repr_str += "\n"
-        return repr_str
-
-
-def numpy_collate(batch):
-    return tree_map(jnp.asarray, torch.utils.data.default_collate(batch))
-
-
-class DataLoader(torch.utils.data.DataLoader):
-    def __init__(self, dataset, batch_size=1,
-                 shuffle=False, sampler=None,
-                 batch_sampler=None, num_workers=0,
-                 pin_memory=False, drop_last=False,
-                 timeout=0, worker_init_fn=None):
-        super(self.__class__, self).__init__(dataset,
-              batch_size=batch_size,
-              shuffle=shuffle,
-              sampler=sampler,
-              batch_sampler=batch_sampler,
-              num_workers=num_workers,
-              collate_fn=numpy_collate,
-              pin_memory=pin_memory,
-              drop_last=drop_last,
-              timeout=timeout,
-              worker_init_fn=worker_init_fn)
 
 
 def generate_rectangle_points(key: jax.random.PRNGKey,
@@ -122,6 +51,98 @@ def generate_circle_points(key: jax.random.PRNGKey,
     return xyc
 
 
+def numpy_collate(batch):
+    return tree_util.tree_map(np.asarray, torch.utils.data.default_collate(batch))
+
+
+class Dataset(torch.utils.data.Dataset):
+
+    def __init__(self, data_dict: dict, seed: int = 0) -> None:
+        # Set data and "labels"
+        # Input structure: One pair for each condition
+        # data  =  {
+        #           "pde": (jnp.ndarray <- collocation points, jnp.ndarray <- RHS if any),
+        #           "xy": (jnp.ndarray <- [x, y, z, ...], jnp.ndarray <- [u_xy(x, y, z, ...), v_xy(x, ...), ...]),
+        #           "xx": (jnp.ndarray <-   ---||---    , jnp.ndarray <-   ---||---                       ),
+        #           .
+        #           .
+        #           .
+        #           "val", (jnp.ndarray <- x_val, jnp.ndarray <- u_val)
+        #           }
+        #
+
+        self.key = jax.random.PRNGKey(seed)
+
+        # Data types 
+        self.data_keys = [key for key in data_dict.keys()]
+        
+        # Extract data lengths and calculate 'global' indices of data
+        length = [value[0].shape[0] for value in data_dict.values()]
+        indx = [jnp.arange(sum(length[:i]), sum(length[:i+1])) for i, _ in enumerate(length)]
+        self.data_length_accum = [sum(length[:i+1]) for i, _ in enumerate(length)]
+
+        # Create dictionaries with data lengths and indices
+        self.data_length = flax.core.FrozenDict([(data_key, data_length) for data_key, data_length in zip(self.data_keys, length)])
+        self.data_indx = flax.core.FrozenDict([(data_key, data_indx) for data_key, data_indx in zip(self.data_keys, indx)])
+        self.indx_dict = flax.core.FrozenDict([(key, jnp.arange(value[0].shape[0])) for i, (key, value) in enumerate(data_dict.items())])
+
+        # Flattened/concatenated dataset
+        self.x = np.vstack([data[0] for data in data_dict.values()])
+        self.u = np.vstack([data[1] for data in data_dict.values()])
+        
+        return
+
+    
+    def __len__(self):
+        # Define "length" of dataset
+        return self.x.shape[0]
+
+    def __getitem__(self, index):
+        # Define which data to fetch based on input index
+        type_idx = np.searchsorted(self.data_length_accum, index)
+        # batch = (self.x[index], self.u[index], type_idx)
+        return index, self.x[index], self.u[index], type_idx
+        # return index, index
+
+    def __repr__(self):
+        num_points = 5
+        r = 4
+        repr_str = "\n" + "--------" * r + "  DATASET  " + "--------" * r + "\n\n"
+        repr_str += f"Printing first {num_points} data points for each entry:\n\n"
+        for key, idx in self.data_indx.items():
+            n = min(len(idx), num_points)
+            repr_str += (16*r+11) * "-"
+            repr_str += f"\nType: '{key}'"
+            repr_str += "\n\nData points:\n"
+            repr_str += str(self.x[idx[:n]])
+            repr_str += "\n\nFunction values\n"
+            repr_str += str(self.u[idx[:n]])
+            repr_str += "\n\n\n"
+        repr_str += "\n"
+        repr_str += (16*r+11) * "-"
+        repr_str += "\n"
+        return repr_str
+
+
+class DataLoader(torch.utils.data.DataLoader):
+    def __init__(self, dataset, batch_size=1,
+                 shuffle=False, sampler=None,
+                 batch_sampler=None, num_workers=0,
+                 pin_memory=False, drop_last=False,
+                 timeout=0, worker_init_fn=None):
+        super(self.__class__, self).__init__(dataset,
+              batch_size=batch_size,
+              shuffle=shuffle,
+              sampler=sampler,
+              batch_sampler=batch_sampler,
+              num_workers=num_workers,
+              collate_fn=numpy_collate,
+              pin_memory=pin_memory,
+              drop_last=drop_last,
+              timeout=timeout,
+              worker_init_fn=worker_init_fn)
+
+
 if __name__ == "__main__":
     from utils.utils import out_shape
 
@@ -135,6 +156,7 @@ if __name__ == "__main__":
     batch_size = 16
     print(dataset)
 
-    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-    for i, batch in enumerate(dataloader):
-        print("Batch", i, "with indices", batch[0], "\n\n")
+    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+    for i, (global_indices, x, u, tidx) in enumerate(dataloader):
+        print("Batch", i, "with indices", global_indices, "\n", x, "\n", u, "\n", tidx, "\n\n")
+    
