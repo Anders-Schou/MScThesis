@@ -10,7 +10,7 @@ import torch.utils.data
 import flax
 
 from datahandlers.samplers import sample_line
-from utils.utils import limits2vertices
+from utils.utils import limits2vertices, remove_points
 
 
 def generate_rectangle_points(key: jax.random.PRNGKey,
@@ -50,6 +50,43 @@ def generate_circle_points(key: jax.random.PRNGKey,
     xyc = jnp.stack([xc, yc], axis=1).reshape((-1,2))
     return xyc
 
+def generate_collocation_points(key: jax.random.PRNGKey,
+                                xlim: Sequence[float],
+                                ylim: Sequence[float],
+                                num_coll: int) -> jnp.ndarray:
+    shape_pde = (num_coll, 1)
+    
+    x_key, y_key = jax.random.split(key, 2)
+
+    x_train = jax.random.uniform(x_key, shape_pde, minval=xlim[0], maxval=xlim[1])
+    y_train = jax.random.uniform(y_key, shape_pde, minval=ylim[0], maxval=ylim[1])
+    xp = jnp.stack([x_train, y_train], axis=1).reshape((-1,2))
+    
+    return xp
+
+def generate_rectangle_with_hole(key: jax.random.PRNGKey,
+                                radius: float, 
+                                xlim: Sequence[float],
+                                ylim: Sequence[float],
+                                num_coll: int,
+                                num_rBC: int,
+                                num_cBC: int,
+                                num_test: int = 0):
+
+    key, rkey, ckey, collkey, testkey = jax.random.split(key, 5)
+    
+    xy_coll = generate_collocation_points(collkey, xlim, ylim, num_coll)
+    xy_coll = remove_points(xy_coll, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
+    
+    xy_rect = generate_rectangle_points(rkey, xlim, ylim, num_rBC)
+    
+    xy_circ = generate_circle_points(ckey, radius, num_cBC)
+    
+    xy_test = generate_collocation_points(testkey, xlim, ylim, num_test)
+    xy_test = remove_points(xy_test, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
+    
+    return tuple([xy_coll, xy_rect, xy_circ, xy_test]) #Skal key returnes her og i gen_collocation?
+    
 
 def numpy_collate(batch):
     return tree_util.tree_map(np.asarray, torch.utils.data.default_collate(batch))

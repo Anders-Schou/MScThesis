@@ -1,2 +1,8 @@
 python -m pip install --upgrade pip
-python -m pip install --upgrade tqdm matplotlib "jax[cuda12_local]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html flax optax orbax-checkpoint torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install --upgrade tqdm 
+python -m pip install --upgrade matplotlib 
+python -m pip install --upgrade "jax[cuda12_local]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html 
+python -m pip install --upgrade flax 
+python -m pip install --upgrade optax 
+python -m pip install --upgrade orbax-checkpoint 
+python -m pip install --upgrade torch --index-url https://download.pytorch.org/whl/cpu

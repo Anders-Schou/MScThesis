@@ -11,12 +11,13 @@ import matplotlib.pyplot as plt
 # from torch.utils.tensorboard import SummaryWriter
 
 from models.networks import MLP, setup_network, setup_run
-from models.derivatives import diff_xx, diff_xy, diff_yy, biharmonic
-from datahandlers.generators import generate_circle_points, generate_rectangle_points
+# from models.derivatives import diff_xx, diff_xy, diff_yy, biharmonic
+from datahandlers.generators import generate_rectangle_with_hole
 from setup.parsers import parse_arguments
-from utils.plotting import save_fig, plot_potential, plot_stress, plot_circle, get_plot_variables
+from utils.plotting import save_fig, plot_potential, plot_stress, plot_polar_stress, plot_circle, get_plot_variables
 from utils.transforms import cart2polar_tensor, xy2r
-from utils.platewithhole import cart_sol_true, cart_stress_true
+from utils.transforms import *
+from utils.platewithhole import cart_sol_true, cart_stress_true, polar_stress_true
 from utils.utils import out_shape, remove_points
 
 class PPINN:
@@ -94,10 +95,12 @@ class PPINN:
     def circle_bc2(self, params, x: jnp.ndarray) -> float:
         out = self.hessian(params, x)
         rtheta_stress = jax.vmap(cart2polar_tensor, in_axes=(0, 0))(out.reshape(-1, 2, 2), x)
-        return ((rtheta_stress[:, 0, 0].ravel())**2).mean() + ((rtheta_stress[:, 0, 1].ravel())**2).mean()
+        return ((rtheta_stress[:, 0, 0].ravel())**2).mean() + \
+            ((rtheta_stress[:, 0, 1].ravel())**2).mean()
+            # ((rtheta_stress[:, 1, 1].ravel() - (10*(1 - 2*jnp.cos(2*xy2theta(x[:,0], x[:,1]))).ravel()))**2).mean()
 
-    def rhs(self, x):
-        return jnp.zeros((x.shape[0], 1))#4 * jnp.multiply(jnp.sin(x[:, 0]), jnp.sin(x[:, 1]))
+    # def rhs(self, x):
+    #     return jnp.zeros((x.shape[0], 1))#4 * jnp.multiply(jnp.sin(x[:, 0]), jnp.sin(x[:, 1]))
     
     def pde(self, params, x: jnp.ndarray):
         phi = self.forward
@@ -108,18 +111,12 @@ class PPINN:
               params,
               x: tuple[jnp.ndarray]
               ) -> float:
-        xp, xr, xc = x
-        # ur, uc, up = u_bc
-        # urpp, ucpp = upp_bc
-        
-        # return (jnp.square(jnp.subtract(self.forward(params, xp), up))).mean()
-        return self.circle_bc2(params, xc) + self.pde(params, xp) + self.rect_bc2(params, xr)
-        # return self.rect_bc2h(params, xr[0]) + \
-        #        self.rect_bc2v(params, xr[1]) + \
-        #        self.rect_bc2h(params, xr[2]) + \
-        #        self.rect_bc2v(params, xr[3]) + \
-        #        self.circle_bc2(params, xc, ucpp) + \
-        #        self.pde(params, xp)
+        xy_coll, xy_rect, xy_circ = x
+        # u_coll, u_rect, u_circ = u_bc
+        # sigma_rect, sigma_circ = sigma_bc
+
+        return self.circle_bc2(params, xy_circ) + self.pde(params, xy_coll) + self.rect_bc2(params, xy_rect)
+
     
     @partial(jax.jit, static_argnums=(0,))
     def update(self,
@@ -184,6 +181,11 @@ if __name__ == "__main__":
     XLIM = [-R, R]
     YLIM = [-R, R]
     RADIUS = 2.0
+    
+    # [xx, xy, yx, yy]
+    OUTER_STRESS = ([0, 0], [0, TENSION])
+    # [rr, rt, tr, tt]
+    INNER_STRESS = ([0, 0], [0, 0])
 
 
 
@@ -194,80 +196,38 @@ if __name__ == "__main__":
     D = -TENSION*RADIUS**4/4
     true_sol_polar = lambda r, theta: ((TENSION*r**2/4 - TENSION*r**2*jnp.cos(2*theta)/4) + A*jnp.log(r) + B*theta + C*jnp.cos(2*theta) + D*jnp.pow(r,-2)*jnp.cos(2*theta))
     true_sol_cart = lambda x, y: true_sol_polar(jnp.sqrt(x**2 + y**2), jnp.arctan2(y, x))
+
     
-
-
-
-    num_r = 1000
-    num_c = 2000
-    num_pde = 20000
+    num_coll = 5000
+    num_rBC = 500
+    num_cBC = 400
     num_test = 100
-
-    # Per dimension
-    shape_bc = (num_r, 1)
-    shape_stress = (num_r, 4)
-    shape_pde = (num_pde, 1)
-    shape_test = (num_test, 1)
-
-    # x_BC = jnp.concatenate([x_BC1, x_BC2, x_BC3, x_BC4])
-    # y_BC = jnp.concatenate([y_BC1, y_BC2, y_BC3, y_BC4])
-    # BC = jnp.stack([x_BC, y_BC], axis=1).reshape((-1,2))
-
-
-    # POINTS
-    rkey, ckey, key = jax.random.split(key, 3)
-    rect_points = generate_rectangle_points(rkey, XLIM, YLIM, num_r) 
-    circ_points = generate_circle_points(ckey, RADIUS, num_c)
-
-    xr = jnp.concatenate(rect_points)
     
-    # [print(jax.vmap(partial(cart_stress_true, a=RADIUS))(r[:5])) for r in rect_points]
-    # exit()
-    xc = circ_points
-
-    key, x_key, y_key, x_key_test, y_key_test = jax.random.split(key, 5)
-
-    x_train = jax.random.uniform(x_key, shape_pde, minval=XLIM[0], maxval=XLIM[1])
-    y_train = jax.random.uniform(y_key, shape_pde, minval=YLIM[0], maxval=YLIM[1])
-    xp = jnp.stack([x_train, y_train], axis=1).reshape((-1,2))
-
-    x_test = jax.random.uniform(x_key_test, shape_test, minval=XLIM[0], maxval=XLIM[1])
-    y_test = jax.random.uniform(y_key_test, shape_test, minval=YLIM[0], maxval=YLIM[1])
-    xt = jnp.stack([x_test, y_test], axis=1).reshape((-1,2))
-
-    # Remove sample points inside circle
-    xp = remove_points(xp, lambda p: jnp.linalg.norm(p, axis=-1) <= RADIUS)
-    xt = remove_points(xt, lambda p: jnp.linalg.norm(p, axis=-1) <= RADIUS)
-
-    x = (xp, rect_points, xc)
-   
-    u_stress = jnp.full((num_r, 1), TENSION)
-    u_zero = jnp.zeros((num_c, 1))
-    rect_stress = (u_stress, u_zero, u_stress, u_zero)
-
-    circ_stress = jnp.concatenate([jnp.full((num_c, 1), 0) for i in range(2) for j in range(2)], axis=1)
-
-    urpp = jnp.concatenate(rect_stress)
-    ucpp = circ_stress
-    upp = (urpp, ucpp)
+    key, subkey = jax.random.split(key, 2)
     
-    # ur = jnp.zeros((num_bc*4, 1))
-    ur = cart_sol_true(xr[:, 0], xr[:, 1], S=TENSION, a=RADIUS).reshape(-1, 1)
-    uc = jnp.zeros((num_c, 1))
-    up = cart_sol_true(xp[:, 0], xp[:, 1], S=TENSION, a=RADIUS).reshape(-1, 1)
-    u = (ur, uc, up)
+    xy_coll, xy_rect_tuple, xy_circ, xy_test = generate_rectangle_with_hole(subkey, RADIUS, XLIM, YLIM, num_coll, num_rBC, num_cBC, num_test)
+    xy_rect = jnp.concatenate(xy_rect_tuple)
     
-    # exit()
+    x = (xy_coll, xy_rect_tuple, xy_circ)
+    
+    sigma = (OUTER_STRESS, INNER_STRESS)
+    
+    u_rect = cart_sol_true(xy_rect[:, 0], xy_rect[:, 1], S=TENSION, a=RADIUS).reshape(-1, 1)
+    u_circ = jnp.zeros((num_cBC, 1))
+    u_coll = cart_sol_true(xy_coll[:, 0], xy_coll[:, 1], S=TENSION, a=RADIUS).reshape(-1, 1)
+    u = (u_coll, u_rect, u_circ)
+    
+
     if do_sample_data_plots:
         # Plot training points
-        plt.scatter(xp[:, 0], xp[:, 1])
-        [plt.scatter(bc[:, 0], bc[:, 1], c='green') for bc in rect_points]
-        plt.scatter(circ_points[:, 0], circ_points[:, 1], c='red')
+        plt.scatter(xy_coll[:, 0], xy_coll[:, 1])
+        plt.scatter(xy_rect[:, 0], xy_rect[:, 1], c='green')
+        plt.scatter(xy_circ[:, 0], xy_circ[:, 1], c='red')
         save_fig(fig_dir, "training_points", format="png")
         plt.clf()
 
         # Plot test points
-        plt.scatter(xt[:,0], xt[:,1], c = 'green')
+        plt.scatter(xy_test[:,0], xy_test[:,1], c = 'green')
         save_fig(fig_dir, "test_points", format="png")
         plt.clf()
 
@@ -287,26 +247,35 @@ if __name__ == "__main__":
 
     print("Entering training phase:")
     t1 = perf_counter()
-    pinn.train(run_settings["specifications"]["iterations"], 200, x, u, upp)
+    pinn.train(run_settings["specifications"]["iterations"], 200, x, u, sigma)
     t2 = perf_counter()
     print("Training done!")
     print(f"Time: {t2-t1:.2f}")
-    
+
+
 
     if do_result_plots:
         X, Y, plotpoints = get_plot_variables(XLIM, YLIM, grid=201)
+        R, THETA, plotpoints_polar = get_plot_variables([RADIUS, R], [0, 4*jnp.pi], grid=201)
         
         z = pinn.predict(plotpoints)
         Z = z.reshape(X.shape)
-        #Ztrue = cart_sol_true(X, Y, S=TENSION, a=RADIUS)*(xy2r(X, Y) >= RADIUS)
-        Ztrue = true_sol_cart(X, Y)*(xy2r(X, Y) >= RADIUS)
+        z_polar = pinn.predict(jax.vmap(rtheta2xy)(plotpoints_polar))
+        Z_polar = z.reshape(R.shape)
+        Ztrue = cart_sol_true(X, Y, S=TENSION, a=RADIUS)*(xy2r(X, Y) >= RADIUS)
+        # Ztrue = true_sol_cart(X, Y)*(xy2r(X, Y) >= RADIUS)
 
         zpp = pinn.hessian_flatten(pinn.params, plotpoints)
         Zpp = [zpp[:, i].reshape(X.shape)*(xy2r(X, Y) >= RADIUS) for i in range(4)]
+        zpp_polar = jax.vmap(cart2polar_tensor, (0, 0))(pinn.hessian_flatten(pinn.params, jax.vmap(rtheta2xy)(plotpoints_polar)).reshape(-1, 2, 2), jax.vmap(rtheta2xy)(plotpoints_polar)).reshape(-1, 4)
+        Zpp_polar = [zpp_polar[:, i].reshape(R.shape)*(R >= RADIUS) for i in range(4)]
         Zhesstrue = jax.vmap(cart_stress_true)(plotpoints)
         Zpptrue = [Zhesstrue.reshape(-1, 4)[:, i].reshape(X.shape)*(xy2r(X, Y) >= RADIUS) for i in [3, 1, 2, 0]]
+        Zhesstrue_polar = jax.vmap(polar_stress_true)(plotpoints_polar)
+        Zpptrue_polar = [Zhesstrue_polar.reshape(-1, 4)[:, i].reshape(R.shape)*(R >= RADIUS) for i in [3, 1, 2, 0]]
         
         plot_potential(X, Y, Z, Ztrue, fig_dir, "potential", radius=RADIUS)
         plot_stress(X, Y, Zpp, Zpptrue, fig_dir, "stress", radius=RADIUS)
+        plot_polar_stress(R, THETA, Zpp_polar, Zpptrue_polar, fig_dir, "stress_polar", radius=RADIUS)
 
 
