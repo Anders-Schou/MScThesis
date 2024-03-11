@@ -79,12 +79,12 @@ def plot_stress(X, Y, Z, Z_true, fig_dir, name, extension="png", radius = 2, cir
     fig, ax = plt.subplots(3, 3, figsize=(35, 30))
     ax[0, 0].set_aspect('equal', adjustable='box')
     ax[0, 0].set_title("XX stress", fontsize=FONTSIZE)
-    p1 = ax[0, 0].contourf(X , Y, Z[0], levels=CLEVELS)#, vmin=vmin0, vmax=vmax0)
+    p1 = ax[0, 0].contourf(X , Y, Z[0], levels=CLEVELS, vmin=vmin0, vmax=vmax0)
     plt.colorbar(p1, ax=ax[0, 0])
 
     ax[0, 1].set_aspect('equal', adjustable='box')
     ax[0, 1].set_title("XY stress", fontsize=FONTSIZE)
-    p2 = ax[0, 1].contourf(X, Y, Z[1], levels=CLEVELS)#, vmin=vmin1, vmax=vmax1)
+    p2 = ax[0, 1].contourf(X, Y, Z[1], levels=CLEVELS, vmin=vmin1, vmax=vmax1)
     plt.colorbar(p2, ax=ax[0, 1])
     
     # ax[0, 2].set_aspect('equal', adjustable='box')
@@ -94,7 +94,7 @@ def plot_stress(X, Y, Z, Z_true, fig_dir, name, extension="png", radius = 2, cir
 
     ax[0, 2].set_aspect('equal', adjustable='box')
     ax[0, 2].set_title("YY stress", fontsize=FONTSIZE)
-    p4 = ax[0, 2].contourf(X, Y, Z[3], levels=CLEVELS)#, vmin=vmin3, vmax=vmax3)
+    p4 = ax[0, 2].contourf(X, Y, Z[3], levels=CLEVELS, vmin=vmin3, vmax=vmax3)
     plt.colorbar(p4, ax=ax[0, 2])
 
 
@@ -167,22 +167,22 @@ def plot_polar_stress(X, Y, Z, Z_true, fig_dir, name, extension="png", radius = 
     fig, ax = plt.subplots(3, 3, figsize=(35, 30))
     ax[0, 0].set_aspect('equal', adjustable='box')
     ax[0, 0].set_title("RR stress", fontsize=FONTSIZE)
-    p1 = ax[0, 0].contourf(X , Y, Z[0], levels=CLEVELS)#, vmin=vmin0, vmax=vmax0)
+    p1 = ax[0, 0].contourf(X , Y, Z[0], levels=CLEVELS, vmin=vmin0, vmax=vmax0)
     plt.colorbar(p1, ax=ax[0, 0])
 
     ax[0, 1].set_aspect('equal', adjustable='box')
     ax[0, 1].set_title("RT stress", fontsize=FONTSIZE)
-    p2 = ax[0, 1].contourf(X, Y, Z[1], levels=CLEVELS)#, vmin=vmin1, vmax=vmax1)
+    p2 = ax[0, 1].contourf(X, Y, Z[1], levels=CLEVELS, vmin=vmin1, vmax=vmax1)
     plt.colorbar(p2, ax=ax[0, 1])
     
     # ax[0, 2].set_aspect('equal', adjustable='box')
     # ax[0, 2].set_title("YX stress", fontsize=FONTSIZE)
-    # p3 = ax[0, 2].contourf(X, Y, Z[2], levels=CLEVELS)#, vmin=vmin2, vmax=vmax2)
+    # p3 = ax[0, 2].contourf(X, Y, Z[2], levels=CLEVELS, vmin=vmin2, vmax=vmax2)
     # plt.colorbar(p3, ax=ax[0, 2])
 
     ax[0, 2].set_aspect('equal', adjustable='box')
     ax[0, 2].set_title("TT stress", fontsize=FONTSIZE)
-    p4 = ax[0, 2].contourf(X, Y, Z[3], levels=CLEVELS)#, vmin=vmin3, vmax=vmax3)
+    p4 = ax[0, 2].contourf(X, Y, Z[3], levels=CLEVELS, vmin=vmin3, vmax=vmax3)
     plt.colorbar(p4, ax=ax[0, 2])
 
 

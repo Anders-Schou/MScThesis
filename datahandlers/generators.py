@@ -10,7 +10,7 @@ import torch.utils.data
 import flax
 
 from datahandlers.samplers import sample_line
-from utils.utils import limits2vertices, remove_points
+from utils.utils import limits2vertices, remove_points, keep_points
 
 
 def generate_rectangle_points(key: jax.random.PRNGKey,
@@ -73,18 +73,28 @@ def generate_rectangle_with_hole(key: jax.random.PRNGKey,
                                 num_cBC: int,
                                 num_test: int = 0):
 
+    num_extra = num_coll // 2
+
     key, rkey, ckey, collkey, testkey = jax.random.split(key, 5)
     
+
     xy_coll = generate_collocation_points(collkey, xlim, ylim, num_coll)
     xy_coll = remove_points(xy_coll, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
-    
     xy_rect = generate_rectangle_points(rkey, xlim, ylim, num_rBC)
-    
     xy_circ = generate_circle_points(ckey, radius, num_cBC)
-    
     xy_test = generate_collocation_points(testkey, xlim, ylim, num_test)
     xy_test = remove_points(xy_test, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
     
+    key, keytheta, keyr = jax.random.split(key, 3)
+    theta_rand = jax.random.uniform(keytheta, (num_extra, 1), minval=0, maxval=2*jnp.pi)
+    r_rand = jax.random.chisquare(keyr, df=2, shape=(num_extra, 1)) / 10 + radius
+    xy_extra = jnp.stack([r_rand*jnp.cos(theta_rand), r_rand*jnp.sin(theta_rand)], axis=1).reshape((-1,2))
+
+    xy_extra = keep_points(xy_extra, lambda p: jnp.logical_and(jnp.logical_and(p[:, 0] >= xlim[0], p[:, 0] <= xlim[1]),
+                                                               jnp.logical_and(p[:, 1] >= ylim[0], p[:, 1] <= ylim[1])))
+
+    xy_coll = jnp.concatenate((xy_coll, xy_extra))
+
     return tuple([xy_coll, xy_rect, xy_circ, xy_test]) #Skal key returnes her og i gen_collocation?
     
 

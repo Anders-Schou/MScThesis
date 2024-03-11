@@ -31,14 +31,14 @@ def cart2polar_tensor(stresses, xy):
     costheta = jnp.cos(theta)
     sintheta = jnp.sin(theta)
     P = jnp.array([[costheta, sintheta], [-sintheta, costheta]])
-    return P @ stresses @ P.T
+    return jnp.matmul(P, jnp.matmul(stresses, P.T))
 
 
 def polar2cart_tensor(stresses, rt):
     costheta = jnp.cos(rt[1])
     sintheta = jnp.sin(rt[1])
     P = jnp.array([[costheta, sintheta], [-sintheta, costheta]])
-    return P.T @ stresses @ P
+    return jnp.matmul(P.T, jnp.matmul(stresses, P))
 
 
 # def cart2polar(sigma_xx: jnp.ndarray,
