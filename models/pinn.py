@@ -77,10 +77,10 @@ class PPINN:
         out1 = self.hessian(params, x[1]) # vertical right
         out2 = self.hessian(params, x[2]) # horizontal upper
         out3 = self.hessian(params, x[3]) # vertical left
-        hl = ((out0[:, 0, 0, 0].ravel() - sigma_bc[1, 1])**2).mean() + ((out0[:, 0, 0, 1].ravel() - sigma_bc[1, 0])**2).mean() # horizontal lower
-        vr = ((out1[:, 0, 1, 1].ravel() - sigma_bc[0, 0])**2).mean() + ((out1[:, 0, 1, 0].ravel() - sigma_bc[0, 1])**2).mean() # vertical right
-        hu = ((out2[:, 0, 0, 0].ravel() - sigma_bc[1, 1])**2).mean() + ((out2[:, 0, 0, 1].ravel() - sigma_bc[1, 0])**2).mean() # horizontal upper
-        vl = ((out3[:, 0, 1, 1].ravel() - sigma_bc[0, 0])**2).mean() + ((out3[:, 0, 1, 0].ravel() - sigma_bc[0, 1])**2).mean() # vertical left
+        hl = ((out0[:, 0, 0, 0].ravel() - sigma_bc[1][1])**2).mean() + ((out0[:, 0, 0, 1].ravel() - sigma_bc[1][0])**2).mean() # horizontal lower
+        vr = ((out1[:, 0, 1, 1].ravel() - sigma_bc[0][0])**2).mean() + ((out1[:, 0, 1, 0].ravel() - sigma_bc[0][1])**2).mean() # vertical right
+        hu = ((out2[:, 0, 0, 0].ravel() - sigma_bc[1][1])**2).mean() + ((out2[:, 0, 0, 1].ravel() - sigma_bc[1][0])**2).mean() # horizontal upper
+        vl = ((out3[:, 0, 1, 1].ravel() - sigma_bc[0][0])**2).mean() + ((out3[:, 0, 1, 0].ravel() - sigma_bc[0][1])**2).mean() # vertical left
         return hl + vr + hu + vl
 
     def circle_bc0(self, params, x, u):
@@ -92,7 +92,7 @@ class PPINN:
         sigmas = out[:, [3, 1, 2, 0]]
         sigmas = sigmas.at[:, [1, 2]].set(jnp.negative(out[:, [1, 2]]))
         rtheta_stress = jax.vmap(cart2polar_tensor, in_axes=(0, 0))(sigmas.reshape(-1, 2, 2), x)
-        return ((rtheta_stress[:, 0, 0].ravel() - sigma_bc[0, 0])**2).mean() + ((rtheta_stress[:, 0, 1].ravel() - sigma_bc[0, 1])**2).mean()
+        return ((rtheta_stress[:, 0, 0].ravel() - sigma_bc[0][0])**2).mean() + ((rtheta_stress[:, 0, 1].ravel() - sigma_bc[0][1])**2).mean()
 
     def coll(self, params, x, u):
         out = self.forward(params, x)
@@ -121,7 +121,7 @@ class PPINN:
             # self.rect_bc0(params, xy_rect, u_rect) + \
             # self.circle_bc0(params, xy_circ, u_circ)
         
-        return total_loss, circ, rect, pde
+        return total_loss, (circ, rect, pde)
 
     def weighted_loss(self, params, x: tuple[jnp.ndarray], u: tuple[jnp.ndarray], sigma_bc: tuple[jnp.ndarray], prevlosses = (1., 1., 1.), it = 0):
         
@@ -155,7 +155,7 @@ class PPINN:
         for i in range(max_iter):
             self.params, self.opt_state, loss = self.update(self.params, self.opt_state, x, u_bc, sigma_bc)
             if (i % print_every == 0):
-                print(f"Epoch {i:>6}    MSE: {loss[0]:2.2e}    lr:  {self.schedule(i):2.2e}    (C2 = {loss[1][2]:2.2e}, R2 = {loss[1][3]:2.2e}, PDE = {loss[1][4]:2.2e})")
+                print(f"Epoch {i:>6}    MSE: {loss[0]:2.2e}    lr:  {self.schedule(i):2.2e}    (C2 = {loss[1][0]:2.2e}, R2 = {loss[1][1]:2.2e}, PDE = {loss[1][2]:2.2e})")
                 # print(f"Epoch {i:>6}    MSE: {loss[0]:2.2e}    (Coll = {loss[1][0]:2.2e},    R = {loss[1][1]:2.2e},    C = {loss[1][2]:2.2e})")
                 # losses[l] = loss
                 
