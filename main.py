@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # from torch.utils.tensorboard import SummaryWriter
 
 from models.networks import setup_network, setup_run
-from models.pinn import PPINN
+from models.pinn import PINN
 from datahandlers.generators import generate_rectangle_with_hole
 from setup.parsers import parse_arguments
 from utils.plotting import save_fig, plot_potential, plot_stress, plot_polar_stress, get_plot_variables
@@ -33,11 +33,11 @@ do_result_plots = raw_settings["plotting"]["do_result_plots"]
 do_logging = raw_settings["logging"]
 print_info(network_settings, run_settings)
 
-
 CLEVELS = 101
-CTICKS = [t for t in jnp.linspace(-2, 2, 41)]
 SEED = 1234
 key = jax.random.PRNGKey(SEED)
+
+
 
 TENSION = 10
 R = 10
@@ -46,7 +46,7 @@ YLIM = [-R, R]
 RADIUS = 2.0
 
 # [xx, xy, yx, yy]
-OUTER_STRESS = ([0, 0], [0, TENSION])
+OUTER_STRESS = ([TENSION, 0], [0, 0])
 # [rr, rt, tr, tt]
 INNER_STRESS = ([0, 0], [0, 0])
 
@@ -61,7 +61,7 @@ true_sol_polar = lambda r, theta: ((TENSION*r**2/4 - TENSION*r**2*jnp.cos(2*thet
 true_sol_cart = lambda x, y: true_sol_polar(jnp.sqrt(x**2 + y**2), jnp.arctan2(y, x))
 
 
-num_coll = 2500
+num_coll = 10000
 num_rBC = 500
 num_cBC = 1000
 num_test = 100
@@ -97,7 +97,7 @@ if do_sample_data_plots:
 
 # Create and train PINN
 print("Creating PINN:")
-pinn = PPINN(MLP_instance, run_settings["specifications"], logging=do_logging)
+pinn = PINN(MLP_instance, run_settings["specifications"], logging=do_logging)
 print("PINN created!")
 
 # Collect all data in list of tuples (1 tuple for each loss term)

@@ -7,11 +7,14 @@ import jax
 import jax.numpy as jnp
 import optax
 # from torch.utils.tensorboard import SummaryWriter
+# from flax.training import checkpoints
+# import orbax.checkpoint
 
 from models.networks import MLP
 from utils.transforms import *
+from models.softadapt import softadapt
 
-class PPINN:
+class PINN:
     net: MLP
     loss_fn: Callable
     optimizer: Callable
@@ -103,7 +106,6 @@ class PPINN:
         vPDE = self.biharmonic(phi)
         return (jnp.square(vPDE(params, x).ravel())).mean() # Homogeneous RHS
     
-    
     def loss(self,
               params,
               x: tuple[jnp.ndarray],
@@ -118,17 +120,31 @@ class PPINN:
         pde = self.pde(params, xy_coll)
         
         total_loss = circ + rect + pde
-            # self.rect_bc0(params, xy_rect, u_rect) + \
-            # self.circle_bc0(params, xy_circ, u_circ)
         
-        return total_loss, (circ, rect, pde)
+        return total_loss, circ, rect, pde
 
-    def weighted_loss(self, params, x: tuple[jnp.ndarray], u: tuple[jnp.ndarray], sigma_bc: tuple[jnp.ndarray], prevlosses = (1., 1., 1.), it = 0):
+    def weighted_loss(self, params, x: tuple[jnp.ndarray], u: tuple[jnp.ndarray], sigma_bc: tuple[jnp.ndarray], prevlosses):
         
         total, circ, rect, pde = self.loss(params, x, u, sigma_bc)
         
+        otherloss = (circ, rect, pde)
         
+        prevlosses_tuple = ()
         
+        if len(prevlosses[0]) < 5:
+            for i in range(len(prevlosses)):
+                prevlosses_tuple = prevlosses_tuple + (jnp.append(prevlosses[i], otherloss[i]),)
+        else:
+            for i in range(len(prevlosses)):
+                prevlosses_tuple = prevlosses_tuple + (jnp.append(prevlosses[i][1:], otherloss[i]),)
+        
+        if len(prevlosses) < 5:
+            weighted_loss = circ + rect + pde
+        else:
+            weights = softadapt(prevlosses_tuple)
+            weighted_loss = weights[0] * circ + weights[1] * rect + weights[2] * pde
+        
+        return weighted_loss, prevlosses_tuple 
 
     @partial(jax.jit, static_argnums=(0,))
     def update(self,
@@ -136,11 +152,14 @@ class PPINN:
                opt_state,
                x: tuple[jnp.ndarray],
                u_bc: tuple[jnp.ndarray],
-               sigma_bc: tuple[jnp.ndarray]):
-        (loss, otherloss), grads = jax.value_and_grad(self.loss, argnums=0, has_aux=True)(params, x, u_bc, sigma_bc)
+               sigma_bc: tuple[jnp.ndarray],
+               prevlosses):
+        
+        (loss, prevlosses), grads = jax.value_and_grad(self.weighted_loss, argnums=0, has_aux=True)(params, x, u_bc, sigma_bc, prevlosses)
         updates, opt_state = self.optimizer.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)
-        return params, opt_state, (loss, otherloss)
+        
+        return params, opt_state, loss, prevlosses
     
     def train(self,
               max_iter: int,
@@ -151,11 +170,13 @@ class PPINN:
               ) -> None:
         
         losses = np.zeros(int(max_iter/print_every))
+        prevlosses = (jnp.array([]), jnp.array([]), jnp.array([]))
         l = 0
+        print(f"Epoch {0:>6}")
         for i in range(max_iter):
-            self.params, self.opt_state, loss = self.update(self.params, self.opt_state, x, u_bc, sigma_bc)
-            if (i % print_every == 0):
-                print(f"Epoch {i:>6}    MSE: {loss[0]:2.2e}    lr:  {self.schedule(i):2.2e}    (C2 = {loss[1][0]:2.2e}, R2 = {loss[1][1]:2.2e}, PDE = {loss[1][2]:2.2e})")
+            self.params, self.opt_state, loss, prevlosses = self.update(self.params, self.opt_state, x, u_bc, sigma_bc, prevlosses)
+            if ((i+1) % print_every == 0):
+                print(f"Epoch {i+1:>6}    MSE: {loss:2.2e}    lr:  {self.schedule(i):2.2e}    (C2 = {prevlosses[0][0]:2.2e}, R2 = {prevlosses[1][0]:2.2e}, PDE = {prevlosses[0][0]:2.2e})")
                 # print(f"Epoch {i:>6}    MSE: {loss[0]:2.2e}    (Coll = {loss[1][0]:2.2e},    R = {loss[1][1]:2.2e},    C = {loss[1][2]:2.2e})")
                 # losses[l] = loss
                 
@@ -171,3 +192,17 @@ class PPINN:
         
         self.losses = losses
         return
+    
+    
+    # def write_model(self, iter):
+    #     orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+    #     checkpoints.save_checkpoint(ckpt_dir=self.log_dir,
+    #                                 target = self.params,
+    #                                 step = iter,
+    #                                 overwrite = False,
+    #                                 orbax_checkpointer=orbax_checkpointer)
+        
+        
+        
+        
+        
