@@ -30,6 +30,19 @@ def parse_arguments() -> dict:
     return json_dict
 
 
+def parse_loss_type(loss_str: str) -> Callable:
+    """
+    Based on input string, this function returns a function
+    for calculating the outer loss, e.g. a mean-squared error.
+    """
+    from models.loss import mse
+    
+    loss_str = loss_str.lower()
+    if loss_str == "mse":
+        return mse
+    raise ValueError(f"Loss of type '{loss_str}' is not supported.")
+
+
 def parse_MLP_settings(settings_dict: dict) -> dict:
     """
     Parses settings specified in dictionary.
@@ -47,47 +60,67 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     of activations, initializations and number
     of neurons in hidden layers.
     """
+    settings_dict = settings_dict.copy()
+
     # Get default settings
     settings = MLPSettings()
 
-    # Load settings from dictionary into settings class
-    for key, value in settings_dict.items():
-        if hasattr(settings, key):
-            setattr(settings, key, value)
+    # input_dim
+    if settings_dict.get("input_dim") is not None:
+        check_network_dims(settings_dict["input_dim"], "input_dim")
+        settings.input_dim = settings_dict["input_dim"]
+    
+    # output_dim
+    if settings_dict.get("output_dim") is not None:
+        check_network_dims(settings_dict["output_dim"], "output_dim")
+        settings.output_dim = settings_dict["output_dim"]
+    
+    # hidden_dims
+    if settings_dict.get("hidden_dims") is not None:
+        if isinstance(settings_dict["hidden_dims"], int):
+           settings_dict["hidden_dims"] = [settings_dict["hidden_dims"]]
+        for hidden_dim in settings_dict["hidden_dims"]:
+            check_network_dims(hidden_dim, "hidden_dims")
+        settings.hidden_dims = settings_dict["hidden_dims"]
+        num_hidden = len(settings.hidden_dims)
+
+    # activation
+    if settings_dict.get("activation") is not None:
+        if isinstance(settings_dict["activation"], list):
+            if len(settings_dict["activation"]) != num_hidden:
+                raise SettingsInterpretationError(
+                    "List of activation functions does not correspond to number of hidden layers.")
+            if not all([isinstance(act, str) for act in settings_dict["activation"]]):
+                raise SettingsInterpretationError(
+                    "List of activation functions must be strings.")
+            settings_dict["activation"] = [convert_activation(act) for act in settings_dict["activation"]]
+        elif isinstance(settings_dict["activation"], str):
+            settings_dict["activation"] = [convert_activation(settings_dict["activation"])] * num_hidden
         else:
             raise SettingsInterpretationError(
-                f"Error: '{key}' is not a valid setting.")
-    
-    # Ensure hidden_dims is a list
-    if isinstance(settings.hidden_dims, int):
-        settings.hidden_dims = [settings.hidden_dims]
-    num_hidden = len(settings.hidden_dims)
-
-    # List of activations should have same length as hidden_dims
-    if isinstance(settings.activation, list):
-        if len(settings.activation) != num_hidden:
-            raise SettingsInterpretationError(
-                 "List of activation functions does not correspond to number of hidden layers.")
+                    "Wrong type for activation setting.")
+        settings.activation = settings_dict["activation"]
     else:
         settings.activation = [settings.activation] * num_hidden
-    for a in settings.activation:
-        if not isinstance(a, str):
-            raise SettingsInterpretationError(
-                "Wrong type for initialization setting.")
-    settings.activation = convert_activation(settings.activation)
     
-    # List of initializations should have length = len(hidden_dims) + 1
-    if isinstance(settings.initialization, list):
-        if len(settings.initialization) != num_hidden + 1:
+    # initialization
+    if settings_dict.get("initialization") is not None:
+        if isinstance(settings_dict["initialization"], list):
+            if len(settings_dict["initialization"]) != num_hidden:
+                raise SettingsInterpretationError(
+                    "List of initialization functions does not correspond to number of hidden layers.")
+            if not all([isinstance(init, str) for init in settings_dict["initialization"]]):
+                raise SettingsInterpretationError(
+                    "List of initialization functions must be strings.")
+            settings_dict["initialization"] = [convert_initialization(init) for init in settings_dict["initialization"]]
+        elif isinstance(settings_dict["initialization"], str):
+            settings_dict["initialization"] = [convert_initialization(settings_dict["initialization"])] * (num_hidden+1)
+        else:
             raise SettingsInterpretationError(
-                 "List of weight initializations does not correspond to number of hidden layers.")
+                    "Wrong type for initialization setting.")
+        settings.initialization = settings_dict["initialization"]
     else:
-        settings.initialization = [settings.initialization] * (num_hidden + 1)
-    for i in settings.initialization:
-        if not isinstance(i, str):
-            raise SettingsInterpretationError(
-                "Wrong type for initialization setting.")
-    settings.initialization = convert_initialization(settings.initialization)
+        settings.initialization = [settings.initialization] * (num_hidden+1)
     
     return settings2dict(settings)
 
@@ -111,6 +144,8 @@ def parse_training_settings(settings_dict: dict) -> dict:
     of activations, initializations and number
     of neurons in hidden layers.
     """
+    settings_dict = settings_dict.copy()
+
     # Get default settings
     settings = TrainingSettings()
 
@@ -127,48 +162,59 @@ def parse_training_settings(settings_dict: dict) -> dict:
     return settings2dict(settings)
 
 
-def parse_loss_type(loss_str: str) -> Callable:
-    loss_str = loss_str.lower()
-    if loss_str == "mse":
-        def mse(u: jnp.ndarray, u_true: jnp.ndarray):
-            return jnp.mean(jnp.square(jnp.subtract(u, u_true)))
-        return mse
-    raise ValueError(f"Loss of type '{loss_str}' is not supported.")
-
-
-def convert_activation(act_str: list[str]) -> list[Callable]:
-    supported_activations = SupportedActivations()
-    act_fun = []
-    for a in act_str:
-        try:
-            act_fun.append(getattr(supported_activations, a))
-        except Exception as err:
-            raise SettingsNotSupportedError(f"Activation function '{a} is not supported.") from err
+def convert_activation(act_str: str) -> Callable:
+    """
+    Converts activation string to activation function (callable),
+    based on the supported activations.
+    """
+    try:
+        act_fun = getattr(SupportedActivations, act_str)
+    except Exception as err:
+        raise SettingsNotSupportedError(
+            f"Activation function '{act_str} is not supported.") from err
     return act_fun
 
 
 def convert_initialization(init_str: list[str]) -> list[Callable]:
-    init_fun = []
-    for i in init_str:
-        try:
-            init_fun.append(getattr(nn.initializers, i))
-        except Exception as err:
-            raise SettingsNotSupportedError(f"Initialization '{i} is not supported.") from err
+    """
+    Converts list of initialization strings to list of initialization
+    functions (callables), based on the supported initialization.
+    """
+    try:
+        init_fun = getattr(nn.initializers, init_str)
+    except Exception as err:
+        raise SettingsNotSupportedError(
+            f"Initialization '{init_str} is not supported.") from err
     return init_fun
 
 
-def convert_optimizer(opt_str: str) -> Callable:
-    supported_optimizers = SupportedOptimizers()
+def convert_optimizer(opt_str: str):
+    """
+    Converts optimizer string to optimizer object.
+    """
     try:
-        opt_fun = getattr(supported_optimizers, opt_str)
+        opt_fun = getattr(SupportedOptimizers, opt_str)
     except Exception as err:
-        raise SettingsNotSupportedError(f"Optimizer '{opt_str}' is not supported.") from err
+        raise SettingsNotSupportedError(
+            f"Optimizer '{opt_str}' is not supported.") from err
     return opt_fun
 
 
 def convert_sampling_distribution(dist_str: str) -> Callable:
+    """
+    Converts sampling distribution string to function (callable).
+    """
     try:
         dist_fun = getattr(jax.random, dist_str)
     except Exception as err:
-        raise SettingsNotSupportedError(f"Sampling distribution '{dist_str}' is not supported.") from err
+        raise SettingsNotSupportedError(
+            f"Sampling distribution '{dist_str}' is not supported.") from err
     return dist_fun
+
+
+def check_network_dims(option, name) -> None:
+    if not isinstance(option, int):
+        raise SettingsInterpretationError(f"Option '{name}' must be an integer.")
+    if not option >= 1:
+        raise SettingsInterpretationError(f"Option '{name}' must be positive.")
+    return

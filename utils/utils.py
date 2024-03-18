@@ -30,3 +30,13 @@ def limits2vertices(xlim: Sequence, ylim: Sequence) -> list[tuple[list]]:
          ([xlim[0], ylim[1]], [xlim[0], ylim[0]])  # Left vertical
     ]
     return v
+
+
+def normal_eq(x: jnp.ndarray, y: jnp.ndarray, base: list[Callable], ridge: float | None = None):
+    X = jnp.concatenate([b(x).reshape(-1, 1) for b in base], axis=-1)
+    XT_X = X.T @ X
+    XT_y = X.T @ y
+    if ridge is None:
+        return jnp.linalg.solve(XT_X, XT_y).ravel()
+    return jnp.linalg.solve(XT_X+ridge*jnp.identity(len(base)), XT_y).ravel()
+

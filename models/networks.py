@@ -7,6 +7,7 @@ from setup.parsers import parse_MLP_settings, parse_training_settings
 
 
 def setup_run(run_settings: dict):
+    run_settings = run_settings.copy()
     run_type = run_settings["type"].lower()
     if run_type == "train":
         run_settings["specifications"] = parse_training_settings(run_settings["specifications"])

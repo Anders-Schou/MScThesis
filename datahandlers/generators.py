@@ -64,6 +64,35 @@ def generate_collocation_points(key: jax.random.PRNGKey,
     
     return xp
 
+def generate_extra_points(keyr, keytheta, radius, num_extra):
+    theta_rand = jax.random.uniform(keytheta, (num_extra, 1), minval=0, maxval=2*jnp.pi)
+    r_rand = jax.random.chisquare(keyr, df=2, shape=(num_extra, 1)) / 10 + radius
+    xy_extra = jnp.stack([r_rand*jnp.cos(theta_rand), r_rand*jnp.sin(theta_rand)], axis=1).reshape((-1,2))
+    return xy_extra
+
+
+def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
+                                          radius: float, 
+                                          xlim: Sequence[float],
+                                          ylim: Sequence[float],
+                                          num_coll: int
+                                          ):
+    num_extra = num_coll
+
+    key, key_coll = jax.random.split(key)
+    
+
+    xy_coll = generate_collocation_points(key_coll, xlim, ylim, num_coll)
+    xy_coll = remove_points(xy_coll, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
+    
+    key, keytheta, keyr = jax.random.split(key, 3)
+    xy_extra = generate_extra_points(keyr, keytheta, radius, num_extra)
+    xy_extra = keep_points(xy_extra, lambda p: jnp.logical_and(jnp.logical_and(p[:, 0] >= xlim[0], p[:, 0] <= xlim[1]),
+                                                               jnp.logical_and(p[:, 1] >= ylim[0], p[:, 1] <= ylim[1])))
+
+    xy_coll = jnp.concatenate((xy_coll, xy_extra))
+    return xy_coll
+
 def generate_rectangle_with_hole(key: jax.random.PRNGKey,
                                 radius: float, 
                                 xlim: Sequence[float],
@@ -73,7 +102,7 @@ def generate_rectangle_with_hole(key: jax.random.PRNGKey,
                                 num_cBC: int,
                                 num_test: int = 0):
 
-    num_extra = num_coll // 2
+    num_extra = num_coll
 
     key, rkey, ckey, collkey, testkey = jax.random.split(key, 5)
     

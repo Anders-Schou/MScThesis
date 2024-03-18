@@ -23,41 +23,6 @@ class SettingsNotSupportedError(Exception):
 
 
 @dataclass
-class DirectorySettings:
-    figure_dir: str
-    model_dir: str
-    image_dir: str
-    log_dir: str
-
-
-@dataclass
-class PINNSettings:
-    network: object
-    loss: Callable
-    equation: str
-
-
-@dataclass
-class MLPSettings(Settings):
-    input_dim: int = 1
-    output_dim: int = 1
-    hidden_dims: int | list[int] = 32
-    activation: str | list[str] | Callable | list[Callable] = "tanh"
-    initialization: str | list[str] | Callable | list[Callable] = "glorot_normal"
-
-
-@dataclass
-class TrainingSettings(Settings):
-    iterations: int = 1000
-    optimizer: str | Callable = "adam"
-    learning_rate: float = 1e-3
-    batch_size: int | None = None
-    decay_rate: float | None = None
-    decay_steps: int | None = None
-    transfer_learning: bool = False
-
-
-@dataclass
 class SupportedActivations:
     tanh: Callable = nn.tanh
     sigmoid: Callable = nn.sigmoid
@@ -68,6 +33,8 @@ class SupportedActivations:
 @dataclass
 class SupportedOptimizers:
     adam: Callable = optax.adam
+    adamw: Callable = optax.adamw
+    set_to_zero: Callable = optax.set_to_zero
 
 
 @dataclass
@@ -85,11 +52,50 @@ class SupportedSamplingDistributions:
     uniform: Callable = jax.random.uniform
 
 
-class Model:
-    def __init__(self, settings: dict):
-        self.parse_settings(settings)
+@dataclass
+class DirectorySettings:
+    figure_dir: str
+    model_dir: str
+    image_dir: str
+    log_dir: str
 
-    def parse_settings(self, settings: dict):
-        self.dir = DirectorySettings(**settings["IO"])
-        self.train = settings["run"]["specification"]
 
+@dataclass
+class PINNSettings:
+    network: object
+    loss: Callable
+    equation: str
+
+
+@dataclass
+class TrainingSettings:
+    iterations: int = 1000
+    optimizer: Callable = SupportedOptimizers.adam
+    learning_rate: float = 1e-3
+    batch_size: int | None = None
+    decay_rate: float | None = None
+    decay_steps: int | None = None
+    transfer_learning: bool = False
+
+
+@dataclass
+class EvaluationSettings:
+    error_metric: str = "L2-rel"
+    pass
+
+
+@dataclass
+class PlottingSettings:
+    do_plots: bool = True
+    overwrite: bool = False
+    image_file_type: str = "pdf"
+    pass
+
+
+@dataclass
+class MLPSettings:
+    input_dim: int = 1
+    output_dim: int = 1
+    hidden_dims: int | list[int] = 32
+    activation: Callable | list[Callable] = SupportedActivations.tanh
+    initialization: Callable | list[Callable] = nn.initializers.glorot_normal
