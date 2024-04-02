@@ -13,7 +13,6 @@ from datahandlers.generators import (
     resample
 )
 from models import PINN
-from models.derivatives import hessian
 from models.networks import netmap
 from utils.plotting import get_plot_variables
 from utils.transforms import (
