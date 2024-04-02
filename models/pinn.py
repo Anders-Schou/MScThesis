@@ -1,206 +1,65 @@
-import os
-from functools import partial
-from collections.abc import Callable
+from models import Model
 
-import numpy as np
-import jax
-import jax.numpy as jnp
-import optax
-# from torch.utils.tensorboard import SummaryWriter
-# from flax.training import checkpoints
-# import orbax.checkpoint
 
-from models.networks import MLP
-from utils.transforms import *
-from models.softadapt import softadapt
+class PINN(Model):
+    """
+    General PINN model:
 
-class PINN:
-    net: MLP
-    loss_fn: Callable
-    optimizer: Callable
+    MANDATORY methods to add:
     
-    def __init__(self, net: MLP, run_settings: dict, loss_fn = None, logging = False):
-        self.net = net
-        self.params = self.net.init(jax.random.key(0), jnp.ones((1, net.input_dim)))
-        self.schedule = optax.exponential_decay(run_settings["learning_rate"],
-                                                run_settings["decay_steps"],
-                                                run_settings["decay_rate"])
-        self.optimizer = run_settings["optimizer"](learning_rate=self.schedule)
-        self.opt_state = self.optimizer.init(self.params)
-        self.loss_fn = loss_fn
-        self.logging = logging
-        # self.writer = SummaryWriter(log_dir="/zhome/e8/9/147091/MSc/results/logs")
-        print("Logging:", self.logging)
-        return None
+        self.forward():
+            A forward method, i.e. a forward pass through a network.
+        
+        self.loss_terms():
+            A method that evaluates each loss term. These terms can
+            be specified in separate methods if desired. This method
+            should return a jax.Array of the loss terms.
+        
+        self.update():
+             A method for updating parameters during training.
+        
+        self.train():
+            A method for training the model. Typically calling the
+            'update' method in a loop.
+        
+        self.eval():
+            A method for evaluating the model.        
 
-    def forward(self, params, x: jnp.ndarray) -> jnp.ndarray:
-        return self.net.apply(params, x)
-
-    def predict(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self.net.apply(self.params, x)
     
-    def hessian(self, params, x):
-        u = self.forward
-        hess = jax.hessian(u, argnums=1)
-        v_bc = jax.vmap(hess, in_axes=(None, 0))
-        return v_bc(params, x)
-    
-    def hessian_flatten(self, params, x):
-        return self.hessian(params, x).reshape((-1, 4))
-    
-    def laplacian(self, model) -> Callable:
-        hess = jax.hessian(model, argnums=1)
-        tr = lambda p, xx: jnp.trace(hess(p, xx), axis1=1, axis2=2)
-        return tr
-    
-    def biharmonic(self, model) -> Callable:
-        lap = self.laplacian(model)
-        lap2 = self.laplacian(lap)
-        vPDE = jax.vmap(lap2, in_axes=(None, 0))
-        return vPDE
-    
-    def diagonal(self, model) -> Callable:
-        hess = jax.hessian(model, argnums=1)
-        diag = lambda p, xx: jnp.diagonal(hess(p, xx), axis1=1, axis2=2)
-        return diag
+    OPTIONAL methods to add:
 
-    def rect_bc0(self, params, x: jnp.ndarray, u: jnp.ndarray) -> float:
-        out0 = self.forward(params, x[0]) # horizontal lower
-        out1 = self.forward(params, x[1]) # vertical right
-        out2 = self.forward(params, x[2]) # horizontal upper
-        out3 = self.forward(params, x[3]) # vertical left
-        hl = ((out0.ravel() - u[0].ravel())**2).mean() # horizontal lower
-        vr = ((out1.ravel() - u[1].ravel())**2).mean() # vertical right
-        hu = ((out2.ravel() - u[2].ravel())**2).mean() # horizontal upper
-        vl = ((out3.ravel() - u[3].ravel())**2).mean() # vertical left
-        return hl + vr + hu + vl
-    
-    def rect_bc2(self, params, x, sigma_bc):
-        out0 = self.hessian(params, x[0]) # horizontal lower
-        out1 = self.hessian(params, x[1]) # vertical right
-        out2 = self.hessian(params, x[2]) # horizontal upper
-        out3 = self.hessian(params, x[3]) # vertical left
-        hl = ((out0[:, 0, 0, 0].ravel() - sigma_bc[1][1])**2).mean() + ((out0[:, 0, 0, 1].ravel() - sigma_bc[1][0])**2).mean() # horizontal lower
-        vr = ((out1[:, 0, 1, 1].ravel() - sigma_bc[0][0])**2).mean() + ((out1[:, 0, 1, 0].ravel() - sigma_bc[0][1])**2).mean() # vertical right
-        hu = ((out2[:, 0, 0, 0].ravel() - sigma_bc[1][1])**2).mean() + ((out2[:, 0, 0, 1].ravel() - sigma_bc[1][0])**2).mean() # horizontal upper
-        vl = ((out3[:, 0, 1, 1].ravel() - sigma_bc[0][0])**2).mean() + ((out3[:, 0, 1, 0].ravel() - sigma_bc[0][1])**2).mean() # vertical left
-        return hl + vr + hu + vl
-
-    def circle_bc0(self, params, x, u):
-        out = self.forward(params, x)
-        return ((out.ravel()-u.ravel())**2).mean()
-
-    def circle_bc2(self, params, x: jnp.ndarray, sigma_bc) -> float:
-        out = self.hessian_flatten(params, x)
-        sigmas = out[:, [3, 1, 2, 0]]
-        sigmas = sigmas.at[:, [1, 2]].set(jnp.negative(out[:, [1, 2]]))
-        rtheta_stress = jax.vmap(cart2polar_tensor, in_axes=(0, 0))(sigmas.reshape(-1, 2, 2), x)
-        return ((rtheta_stress[:, 0, 0].ravel() - sigma_bc[0][0])**2).mean() + ((rtheta_stress[:, 0, 1].ravel() - sigma_bc[0][1])**2).mean()
-
-    def coll(self, params, x, u):
-        out = self.forward(params, x)
-        return ((out.ravel() - u.ravel())**2).mean()
-
-    def pde(self, params, x: jnp.ndarray):
-        phi = self.forward
-        vPDE = self.biharmonic(phi)
-        return (jnp.square(vPDE(params, x).ravel())).mean() # Homogeneous RHS
-    
-    def loss(self,
-              params,
-              x: tuple[jnp.ndarray],
-              u: tuple[jnp.ndarray],
-              sigma_bc: tuple[jnp.ndarray]):
-        xy_coll, xy_rect, xy_circ = x
-        u_coll, u_rect, u_circ = u
-        sigma_rect, sigma_circ = sigma_bc
+        self.total_loss():
+            A function summing the loss terms. Can
+            be rewritten to do something else.
         
-        circ = self.circle_bc2(params, xy_circ, sigma_circ)
-        rect = self.rect_bc2(params, xy_rect, sigma_rect)
-        pde = self.pde(params, xy_coll)
+        self.save_state():
+            A method for saving the model state.
         
-        total_loss = circ + rect + pde
-        
-        return total_loss, circ, rect, pde
-
-    def weighted_loss(self, params, x: tuple[jnp.ndarray], u: tuple[jnp.ndarray], sigma_bc: tuple[jnp.ndarray], prevlosses):
-        
-        total, circ, rect, pde = self.loss(params, x, u, sigma_bc)
-        
-        otherloss = (circ, rect, pde)
-        
-        prevlosses_tuple = ()
-        
-        if len(prevlosses[0]) < 5:
-            for i in range(len(prevlosses)):
-                prevlosses_tuple = prevlosses_tuple + (jnp.append(prevlosses[i], otherloss[i]),)
-        else:
-            for i in range(len(prevlosses)):
-                prevlosses_tuple = prevlosses_tuple + (jnp.append(prevlosses[i][1:], otherloss[i]),)
-        
-        if len(prevlosses) < 5:
-            weighted_loss = circ + rect + pde
-        else:
-            weights = softadapt(prevlosses_tuple)
-            weighted_loss = weights[0] * circ + weights[1] * rect + weights[2] * pde
-        
-        return weighted_loss, prevlosses_tuple 
-
-    @partial(jax.jit, static_argnums=(0,))
-    def update(self,
-               params,
-               opt_state,
-               x: tuple[jnp.ndarray],
-               u_bc: tuple[jnp.ndarray],
-               sigma_bc: tuple[jnp.ndarray],
-               prevlosses):
-        
-        (loss, prevlosses), grads = jax.value_and_grad(self.weighted_loss, argnums=0, has_aux=True)(params, x, u_bc, sigma_bc, prevlosses)
-        updates, opt_state = self.optimizer.update(grads, opt_state, params)
-        params = optax.apply_updates(params, updates)
-        
-        return params, opt_state, loss, prevlosses
-    
-    def train(self,
-              max_iter: int,
-              print_every: int,
-              x: tuple[jnp.ndarray],
-              u_bc: tuple[jnp.ndarray],
-              sigma_bc: tuple[jnp.ndarray]
-              ) -> None:
-        
-        losses = np.zeros(int(max_iter/print_every))
-        prevlosses = (jnp.array([]), jnp.array([]), jnp.array([]))
-        l = 0
-        # print(f"Epoch {0:>6}")
-        for i in range(max_iter):
-            self.params, self.opt_state, loss, prevlosses = self.update(self.params, self.opt_state, x, u_bc, sigma_bc, prevlosses)
-            if (i % print_every == 0):
-                print(f"Epoch {i:>6}    MSE: {loss:2.2e}    lr:  {self.schedule(i):2.2e}    (C2 = {prevlosses[0][0]:2.2e}, R2 = {prevlosses[1][0]:2.2e}, PDE = {prevlosses[0][0]:2.2e})")
-                # print(f"Epoch {i:>6}    MSE: {loss[0]:2.2e}    (Coll = {loss[1][0]:2.2e},    R = {loss[1][1]:2.2e},    C = {loss[1][2]:2.2e})")
-                # losses[l] = loss
-                
-                # if self.logging:
-                #     self.writer.add_scalar("loss/total", np.array(loss[0]   ), i)
-                #     self.writer.add_scalar("loss/circ0", np.array(loss[1][0]), i)
-                #     self.writer.add_scalar("loss/rect0", np.array(loss[1][1]), i)
-                #     self.writer.add_scalar("loss/circ2", np.array(loss[1][2]), i)
-                #     self.writer.add_scalar("loss/rect2", np.array(loss[1][3]), i)
-                #     self.writer.add_scalar("loss/pde",   np.array(loss[1][4]), i)
-                #     self.writer.add_scalar("learning_rate", np.array(self.schedule(i)), i)
-                #     l += 1
-        
-        self.losses = losses
-        return
+        self.load_state():
+            A method for loading the model state.
     
     
-    # def write_model(self, iter):
-    #     orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
-    #     checkpoints.save_checkpoint(ckpt_dir=self.log_dir,
-    #                                 target = self.params,
-    #                                 step = iter,
-    #                                 overwrite = False,
-    #                                 orbax_checkpointer=orbax_checkpointer)
+    """
+
+    def __init__(self, settings: dict, *args, **kwargs):
+        super().__init__(settings, *args, **kwargs)
+        if not hasattr(self, "params"):
+            self.params = None
+        self._parse_network_settings(settings["model"]["pinn"]["network"])
+        self._parse_geometry_settings(settings["geometry"])
+
+    def _parse_network_settings(self, network_settings):
+        self.network_settings = network_settings
+    
+    def _parse_geometry_settings(self, geometry_settings):
+        self.geometry_settings = geometry_settings
+    
+    def predict(self, *args, **kwargs):
+        """
+        A basic method for the forward pass without inputting
+        parameters. For external use.
+        """
+        return self.forward(self.params, *args, **kwargs)
         
         
         
