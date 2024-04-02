@@ -1,13 +1,14 @@
 import json
 import argparse
 from collections.abc import Callable
+import pathlib
 
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
 
-from setup.settings import (settings2dict, MLPSettings, TrainingSettings,
-                            SupportedActivations, SupportedOptimizers,
+from setup.settings import (settings2dict, MLPSettings, TrainingSettings, EvaluationSettings,
+                            DirectorySettings, SupportedActivations, SupportedOptimizers,
                             SettingsInterpretationError, SettingsNotSupportedError)
 
 
@@ -125,41 +126,109 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     return settings2dict(settings)
 
 
-def parse_training_settings(settings_dict: dict) -> dict:
+def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     """
-    Parses settings specified in dictionary.
-    Valid settings include those in the default
-    settings class:
+    Parses settings related to training.
 
-        iterations: int = 1000
-        optimizer: str = "adam"
-        learning_rate: float = 1e-3
-        batch_size: int | None = None
-        decay_rate: float | None = None
-        decay_steps: int | None = None
-        transfer_learning: bool = False
-
-    Raises exception if a setting is unknown,
-    or if theres a mismatch in length of lists
-    of activations, initializations and number
-    of neurons in hidden layers.
+    Returns a TrainingSettings object.
     """
+
     settings_dict = settings_dict.copy()
 
     # Get default settings
-    settings = TrainingSettings()
+    settings = TrainingSettings(settings_dict["sampling"])
 
-    # Load settings from dictionary into settings class
-    for key, value in settings_dict.items():
-        if hasattr(settings, key):
-            setattr(settings, key, value)
-        else:
-            raise SettingsInterpretationError(
-                f"Error: '{key}' is not a valid setting.")
+    # iterations
+    if settings_dict.get("iterations") is not None:
+        settings.iterations = settings_dict["iterations"]
     
-    settings.optimizer = convert_optimizer(settings.optimizer)
+    # optimizer
+    if settings_dict.get("optimizer") is not None:
+        settings.optimizer = convert_optimizer(settings_dict["optimizer"])
     
-    return settings2dict(settings)
+    # learning_rate
+    if settings_dict.get("learning_rate") is not None:
+        settings.learning_rate = settings_dict["learning_rate"]
+    
+    # batch_size
+    if settings_dict.get("batch_size") is not None:
+        settings.batch_size = settings_dict["batch_size"]
+    
+    # decay_rate
+    if settings_dict.get("decay_rate") is not None:
+        settings.decay_rate = settings_dict["decay_rate"]
+
+    # decay_steps
+    if settings_dict.get("decay_steps") is not None:
+        settings.decay_steps = settings_dict["decay_steps"]
+    
+    # transfer_learning
+    if settings_dict.get("transfer_learning") is not None:
+        settings.transfer_learning = settings_dict["transfer_learning"]
+    
+    # resampling
+    if settings_dict.get("resampling") is not None:
+        settings.resampling = settings_dict["resampling"]
+
+
+    # # Load settings from dictionary into settings class
+    # for key, value in settings_dict.items():
+    #     if hasattr(settings, key):
+    #         setattr(settings, key, value)
+    #     else:
+    #         raise SettingsInterpretationError(
+    #             f"Error: '{key}' is not a valid setting.")
+    
+    # settings.optimizer = convert_optimizer(settings.optimizer)
+    
+    return settings
+
+def parse_evaluation_settings(settings_dict: dict) -> EvaluationSettings:
+    """
+    Parses settings related to evaluation.
+
+    Returns an EvaluationSettings object.
+    """
+    
+    settings_dict = settings_dict.copy()
+
+    # Get default settings
+    settings = EvaluationSettings(settings_dict["sampling"])
+
+    # error_metric
+    if settings_dict.get("error_metric") is not None:
+        settings.error_metric = settings_dict["error_metric"]
+    
+    # transfer_learning
+    if settings_dict.get("transfer_learning") is not None:
+        settings.transfer_learning = settings_dict["transfer_learning"]
+
+    return settings
+
+
+def parse_directory_settings(dir: DirectorySettings, id: str) -> DirectorySettings:
+    """
+    Parses settings related to file directories.
+
+    Returns a DirectorySettings object.
+    """
+    if dir.figure_dir is None:
+        setattr(dir, "figure_dir", dir.base_dir / "figures")
+    dir.figure_dir = dir.figure_dir / id
+
+    if dir.model_dir is None:
+        setattr(dir, "model_dir", dir.base_dir / "models")
+    dir.model_dir = dir.model_dir / id
+
+    if dir.image_dir is None:
+        setattr(dir, "image_dir", dir.base_dir / "images")
+    dir.image_dir = dir.image_dir / id
+
+    if dir.log_dir is None:
+        setattr(dir, "log_dir", dir.base_dir / "logs")
+    dir.log_dir = dir.log_dir / id
+
+    return dir
 
 
 def convert_activation(act_str: str) -> Callable:

@@ -5,9 +5,9 @@ from collections.abc import Sequence
 import numpy as np
 import jax
 import jax.numpy as jnp
-from jax import tree_util
-import torch.utils.data
+import jax.tree_util as jtu
 import flax
+import torch.utils.data
 
 from datahandlers.samplers import sample_line
 from utils.utils import limits2vertices, remove_points, keep_points
@@ -16,7 +16,7 @@ from utils.utils import limits2vertices, remove_points, keep_points
 def generate_rectangle_points(key: jax.random.PRNGKey,
                               xlim: Sequence[float],
                               ylim: Sequence[float],
-                              num_points: int | Sequence
+                              num_points: int | Sequence[int]
                               ) -> tuple:
     """
     Order of rectangle sides: Lower horizontal, right vertical, upper horizontal, left vertical.
@@ -50,6 +50,7 @@ def generate_circle_points(key: jax.random.PRNGKey,
     xyc = jnp.stack([xc, yc], axis=1).reshape((-1,2))
     return xyc
 
+
 def generate_collocation_points(key: jax.random.PRNGKey,
                                 xlim: Sequence[float],
                                 ylim: Sequence[float],
@@ -64,6 +65,7 @@ def generate_collocation_points(key: jax.random.PRNGKey,
     
     return xp
 
+
 def generate_extra_points(keyr, keytheta, radius, num_extra):
     theta_rand = jax.random.uniform(keytheta, (num_extra, 1), minval=0, maxval=2*jnp.pi)
     r_rand = jax.random.chisquare(keyr, df=2, shape=(num_extra, 1)) / 10 + radius
@@ -75,60 +77,122 @@ def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
                                           radius: float, 
                                           xlim: Sequence[float],
                                           ylim: Sequence[float],
-                                          num_coll: int
+                                          points: int | Sequence[int]
                                           ):
-    num_extra = num_coll
-
-    key, key_coll = jax.random.split(key)
+    """
+    This function samples points in the inner of the domain.
+    """
+    if not isinstance(points, Sequence):
+        points = [points]
     
+    num_coll = points[0]
 
+    # Initial coll point gen
+    key, key_coll = jax.random.split(key)
     xy_coll = generate_collocation_points(key_coll, xlim, ylim, num_coll)
     xy_coll = remove_points(xy_coll, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
     
+    # Filler coll point gen
+    pnum = xy_coll.shape[0]
+    while pnum < num_coll:
+        key, key_coll = jax.random.split(key_coll)
+        tmp = generate_collocation_points(key_coll, xlim, ylim, num_coll)
+        tmp = remove_points(tmp, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
+        xy_coll = jnp.concatenate((xy_coll, tmp))
+        pnum = xy_coll.shape[0]
+    xy_coll = xy_coll[:num_coll]
+
+    # Return if no extra points should be generated
+    if len(points) == 1:
+        return xy_coll
+    
+    num_extra = points[1]
+
+    # Initial extra point gen
     key, keytheta, keyr = jax.random.split(key, 3)
     xy_extra = generate_extra_points(keyr, keytheta, radius, num_extra)
     xy_extra = keep_points(xy_extra, lambda p: jnp.logical_and(jnp.logical_and(p[:, 0] >= xlim[0], p[:, 0] <= xlim[1]),
                                                                jnp.logical_and(p[:, 1] >= ylim[0], p[:, 1] <= ylim[1])))
-
-    xy_coll = jnp.concatenate((xy_coll, xy_extra))
-    return xy_coll
+    
+    # Filler extra point gen
+    pnum = xy_extra.shape[0]
+    while pnum < num_extra:
+        key, keytheta, keyr = jax.random.split(key, 3)
+        tmp = generate_extra_points(keyr, keytheta, radius, num_extra)
+        tmp = keep_points(xy_extra, lambda p: jnp.logical_and(jnp.logical_and(p[:, 0] >= xlim[0], p[:, 0] <= xlim[1]),
+                                                               jnp.logical_and(p[:, 1] >= ylim[0], p[:, 1] <= ylim[1])))
+        xy_extra = jnp.concatenate((xy_extra, tmp))
+        pnum = xy_extra.shape[0]
+    xy_extra = xy_extra[:num_extra]
+    
+    # Collect all points
+    return jnp.concatenate((xy_coll, xy_extra))
+    
 
 def generate_rectangle_with_hole(key: jax.random.PRNGKey,
-                                radius: float, 
-                                xlim: Sequence[float],
-                                ylim: Sequence[float],
-                                num_coll: int,
-                                num_rBC: int,
-                                num_cBC: int,
-                                num_test: int = 0):
+                                 radius: float, 
+                                 xlim: Sequence[float],
+                                 ylim: Sequence[float],
+                                 num_coll: int | Sequence[int],
+                                 num_rect: int | Sequence[int],
+                                 num_circ: int) -> dict[str, jax.Array | tuple[jax.Array]]:
+    """
+    Main function for generating necessary sample points for the plate-with-hole problem.
 
-    num_extra = num_coll
+    The function generates 
+    """
 
-    key, rkey, ckey, collkey, testkey = jax.random.split(key, 5)
+
+    key, rectkey, circkey, collkey = jax.random.split(key, 4)
+
+    xy_coll = generate_collocation_points_with_hole(collkey, radius, xlim, ylim, num_coll)
+    xy_rect = generate_rectangle_points(rectkey, xlim, ylim, num_rect)
+    xy_circ = generate_circle_points(circkey, radius, num_circ)
+    # xy_test = generate_collocation_points_with_hole(testkey, radius, xlim, ylim, num_test)
+    return {"coll": xy_coll, "rect": xy_rect, "circ": xy_circ}
     
 
-    xy_coll = generate_collocation_points(collkey, xlim, ylim, num_coll)
-    xy_coll = remove_points(xy_coll, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
-    xy_rect = generate_rectangle_points(rkey, xlim, ylim, num_rBC)
-    xy_circ = generate_circle_points(ckey, radius, num_cBC)
-    xy_test = generate_collocation_points(testkey, xlim, ylim, num_test)
-    xy_test = remove_points(xy_test, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
-    
-    key, keytheta, keyr = jax.random.split(key, 3)
-    theta_rand = jax.random.uniform(keytheta, (num_extra, 1), minval=0, maxval=2*jnp.pi)
-    r_rand = jax.random.chisquare(keyr, df=2, shape=(num_extra, 1)) / 10 + radius
-    xy_extra = jnp.stack([r_rand*jnp.cos(theta_rand), r_rand*jnp.sin(theta_rand)], axis=1).reshape((-1,2))
+def resample(new_arr: jax.Array, new_loss: jax.Array, num_keep: int):
+    """
+    Utility function for choosing the points with
+    highest loss.
 
-    xy_extra = keep_points(xy_extra, lambda p: jnp.logical_and(jnp.logical_and(p[:, 0] >= xlim[0], p[:, 0] <= xlim[1]),
-                                                               jnp.logical_and(p[:, 1] >= ylim[0], p[:, 1] <= ylim[1])))
+    input:
+        new_arr:
+            The array to choose points from.
+        
+        new_loss:
+            The losses to base the choice on.
+        
+        num_keep:
+            The number of sampled points to keep.
+        
+    """
 
-    xy_coll = jnp.concatenate((xy_coll, xy_extra))
+    num_keep = min(num_keep, new_loss.ravel().shape[0])
+    idx = jnp.argpartition(new_loss.ravel(), kth=-num_keep)
+    return new_arr[idx[-num_keep:]]
 
-    return tuple([xy_coll, xy_rect, xy_circ, xy_test]) #Skal key returnes her og i gen_collocation?
-    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def numpy_collate(batch):
-    return tree_util.tree_map(np.asarray, torch.utils.data.default_collate(batch))
+    return jtu.tree_map(np.asarray, torch.utils.data.default_collate(batch))
 
 
 class Dataset(torch.utils.data.Dataset):

@@ -4,15 +4,15 @@ import jax
 import jax.numpy as jnp
 
 
-def cyclic_diff(x: jnp.ndarray) -> jnp.ndarray:
+def cyclic_diff(x: jax.Array) -> jax.Array:
     return jnp.subtract(x, jnp.roll(x, -1))
 
 
-def remove_points(arr: jnp.ndarray, fun: Callable) -> jnp.ndarray:
+def remove_points(arr: jax.Array, fun: Callable) -> jax.Array:
     return arr[jnp.invert(fun(arr))].copy()
 
 
-def keep_points(arr: jnp.ndarray, fun: Callable) -> jnp.ndarray:
+def keep_points(arr: jax.Array, fun: Callable) -> jax.Array:
     return arr[fun(arr)].copy()
 
 
@@ -21,8 +21,11 @@ def out_shape(fun, *args):
 
 
 def limits2vertices(xlim: Sequence, ylim: Sequence) -> list[tuple[list]]:
-    # Works for rectangles only. Returns pairs of end points for
-    # each of the four sides in counterclockwise order.
+    """
+    Works for rectangles only. Returns pairs of end points for
+    each of the four sides in counterclockwise order.
+    """
+    
     v = [
          ([xlim[0], ylim[0]], [xlim[1], ylim[0]]), # Lower horizontal
          ([xlim[1], ylim[0]], [xlim[1], ylim[1]]), # Right vertical
@@ -32,7 +35,7 @@ def limits2vertices(xlim: Sequence, ylim: Sequence) -> list[tuple[list]]:
     return v
 
 
-def normal_eq(x: jnp.ndarray, y: jnp.ndarray, base: list[Callable], ridge: float | None = None):
+def normal_eq(x: jax.Array, y: jax.Array, base: list[Callable], ridge: float | None = None):
     X = jnp.concatenate([b(x).reshape(-1, 1) for b in base], axis=-1)
     XT_X = X.T @ X
     XT_y = X.T @ y

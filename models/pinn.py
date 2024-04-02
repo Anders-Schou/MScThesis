@@ -172,11 +172,11 @@ class PINN:
         losses = np.zeros(int(max_iter/print_every))
         prevlosses = (jnp.array([]), jnp.array([]), jnp.array([]))
         l = 0
-        print(f"Epoch {0:>6}")
+        # print(f"Epoch {0:>6}")
         for i in range(max_iter):
             self.params, self.opt_state, loss, prevlosses = self.update(self.params, self.opt_state, x, u_bc, sigma_bc, prevlosses)
-            if ((i+1) % print_every == 0):
-                print(f"Epoch {i+1:>6}    MSE: {loss:2.2e}    lr:  {self.schedule(i):2.2e}    (C2 = {prevlosses[0][0]:2.2e}, R2 = {prevlosses[1][0]:2.2e}, PDE = {prevlosses[0][0]:2.2e})")
+            if (i % print_every == 0):
+                print(f"Epoch {i:>6}    MSE: {loss:2.2e}    lr:  {self.schedule(i):2.2e}    (C2 = {prevlosses[0][0]:2.2e}, R2 = {prevlosses[1][0]:2.2e}, PDE = {prevlosses[0][0]:2.2e})")
                 # print(f"Epoch {i:>6}    MSE: {loss[0]:2.2e}    (Coll = {loss[1][0]:2.2e},    R = {loss[1][1]:2.2e},    C = {loss[1][2]:2.2e})")
                 # losses[l] = loss
                 

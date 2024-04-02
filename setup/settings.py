@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from collections.abc import Callable
+import pathlib
 
 import jax
 import jax.numpy as jnp
@@ -54,21 +55,16 @@ class SupportedSamplingDistributions:
 
 @dataclass
 class DirectorySettings:
-    figure_dir: str
-    model_dir: str
-    image_dir: str
-    log_dir: str
+    base_dir: pathlib.Path
+    figure_dir: pathlib.Path | None = None
+    model_dir: pathlib.Path | None = None
+    image_dir: pathlib.Path | None = None
+    log_dir: pathlib.Path | None = None
 
 
 @dataclass
-class PINNSettings:
-    network: object
-    loss: Callable
-    equation: str
-
-
-@dataclass
-class TrainingSettings:
+class TrainingSettings(Settings):
+    sampling: dict
     iterations: int = 1000
     optimizer: Callable = SupportedOptimizers.adam
     learning_rate: float = 1e-3
@@ -76,16 +72,19 @@ class TrainingSettings:
     decay_rate: float | None = None
     decay_steps: int | None = None
     transfer_learning: bool = False
+    resampling: dict | None = None
 
 
 @dataclass
-class EvaluationSettings:
+class EvaluationSettings(Settings):
+    sampling: dict
     error_metric: str = "L2-rel"
+    transfer_learning: bool = False
     pass
 
 
 @dataclass
-class PlottingSettings:
+class PlottingSettings(Settings):
     do_plots: bool = True
     overwrite: bool = False
     image_file_type: str = "pdf"
@@ -93,7 +92,7 @@ class PlottingSettings:
 
 
 @dataclass
-class MLPSettings:
+class MLPSettings(Settings):
     input_dim: int = 1
     output_dim: int = 1
     hidden_dims: int | list[int] = 32
