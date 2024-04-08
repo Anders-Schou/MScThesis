@@ -1,7 +1,12 @@
 from collections.abc import Sequence, Callable
+from functools import wraps
+import os
+import json
+from time import perf_counter
 
 import jax
 import jax.numpy as jnp
+from torch.utils.tensorboard import SummaryWriter
 
 
 def cyclic_diff(x: jax.Array) -> jax.Array:
@@ -43,3 +48,26 @@ def normal_eq(x: jax.Array, y: jax.Array, base: list[Callable], ridge: float | N
         return jnp.linalg.solve(XT_X, XT_y).ravel()
     return jnp.linalg.solve(XT_X+ridge*jnp.identity(len(base)), XT_y).ravel()
 
+
+def pretty_json(hp):
+  json_hp = json.dumps(hp, indent=2)
+  return "".join("\t" + line for line in json_hp.splitlines(True))
+
+
+def log_settings(settings):
+    os.system("rm -rf " + settings["io"]["log_dir"]+"/"+settings["id"]+"/*")
+    writer = SummaryWriter(log_dir=settings["io"]["log_dir"]+"/"+settings["id"])
+    writer.add_text("settings.json", pretty_json(settings))
+    writer.close()
+    return
+
+
+def timer(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        t1 = perf_counter()
+        v = func(*args, **kwargs)
+        t2 = perf_counter()
+        print(f"Time for function '{func.__name__}': {t2-t1:.6f} seconds")
+        return v
+    return wrapper

@@ -10,6 +10,7 @@ import flax.linen as nn
 from setup.settings import (settings2dict, MLPSettings, TrainingSettings, EvaluationSettings,
                             DirectorySettings, SupportedActivations, SupportedOptimizers,
                             SettingsInterpretationError, SettingsNotSupportedError)
+from utils.utils import log_settings
 
 
 def load_json(path: str) -> dict:
@@ -28,6 +29,8 @@ def parse_arguments() -> dict:
     parser.add_argument("--settings", type=str, required=True)
     args = parser.parse_args()
     json_dict = load_json(args.settings)
+    if json_dict["logging"]["do_logging"]:
+        log_settings(json_dict)
     return json_dict
 
 

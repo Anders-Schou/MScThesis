@@ -6,6 +6,7 @@ import jax.numpy as jnp
 
 from . import analytic
 from . import plotting as pwhplot
+from .plotting import log_plot
 
 from datahandlers.generators import (
     generate_rectangle_with_hole,
@@ -184,19 +185,16 @@ class PWHPINN(PINN):
         self.train_true_val["coll"] = analytic.get_true_vals(self.train_points, exclude=["rect", "circ", "diri"])["coll"]
         return
     
-    def plot_results(self):
-        
+    def get_plot_data_cart(self):
         radius = self.geometry_settings["domain"]["circle"]["radius"]
         xlim = self.geometry_settings["domain"]["rectangle"]["xlim"]
         ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
 
-        X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=101)
-        R, THETA, plotpoints_polar = get_plot_variables([radius, _OUTER_RADIUS], [0, 4*jnp.pi], grid=101)
+        X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=51)
+        R, THETA, plotpoints_polar = get_plot_variables([radius, _OUTER_RADIUS], [0, 4*jnp.pi], grid=51)
         plotpoints2 = jax.vmap(rtheta2xy)(plotpoints_polar)
         
         assert(jnp.allclose(plotpoints, vrtheta2xy(vxy2rtheta(plotpoints)), atol=1e-4))
-
-        phi = self.predict(plotpoints).reshape(X.shape)*(xy2r(X, Y) >= radius)
 
         # Hessian prediction
         phi_pp = netmap(self.hessian)(self.params, plotpoints).reshape(-1, 4)
@@ -225,10 +223,94 @@ class PWHPINN(PINN):
         sigma_polar_true = jax.vmap(analytic.polar_stress_true)(plotpoints_polar)
         sigma_polar_true_list = [sigma_polar_true.reshape(-1, 4)[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
 
-        pwhplot.plot_potential(X, Y, phi,
-                               fig_dir=self.dir.figure_dir, name="potential", radius=radius)
-        pwhplot.plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list,
-                            fig_dir=self.dir.figure_dir, name="stress", radius=radius)
-        pwhplot.plot_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list,
-                                  fig_dir=self.dir.figure_dir, name="stress_polar")
+        return X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list
+    
+    def plot_results(self, save=True, log=False, step=None):
+        
+        X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = self.get_plot_data_cart()
+        radius = self.geometry_settings["domain"]["circle"]["radius"]
+        
+        if save:
+            # save_results()
+            pass
+        if log:        
+            # Log cartesian plots
+            log_plot(X, Y, sigma_cart_list[0], name="Cartesian/Surrogate/XX stress", log_dir=self.dir.log_dir, step=step,
+                    vmin=min(jnp.min(sigma_cart_true_list[0]),jnp.min(sigma_cart_list[0])), 
+                    vmax=max(jnp.max(sigma_cart_true_list[0]),jnp.max(sigma_cart_list[0])))
+            
+            log_plot(X, Y, sigma_cart_list[1], name="Cartesian/Surrogate/XY stress", log_dir=self.dir.log_dir, step=step,
+                    vmin=min(jnp.min(sigma_cart_true_list[1]),jnp.min(sigma_cart_list[1])), 
+                    vmax=max(jnp.max(sigma_cart_true_list[1]),jnp.max(sigma_cart_list[1])))
+                    
+            log_plot(X, Y, sigma_cart_list[3], name="Cartesian/Surrogate/YY stress", log_dir=self.dir.log_dir, step=step,
+                    vmin=min(jnp.min(sigma_cart_true_list[3]),jnp.min(sigma_cart_list[3])), 
+                    vmax=max(jnp.max(sigma_cart_true_list[3]),jnp.max(sigma_cart_list[3])))
+            
+            # These are redundant after first time being logged
+            if step == 0:
+                log_plot(X, Y, sigma_cart_true_list[0], name="Cartesian/True/True XX stress", log_dir=self.dir.log_dir, step=step,
+                        vmin=min(jnp.min(sigma_cart_true_list[0]),jnp.min(sigma_cart_list[0])), 
+                        vmax=max(jnp.max(sigma_cart_true_list[0]),jnp.max(sigma_cart_list[0])))
+                
+                log_plot(X, Y, sigma_cart_true_list[1], name="Cartesian/True/True XY stress", log_dir=self.dir.log_dir, step=step,
+                        vmin=min(jnp.min(sigma_cart_true_list[1]),jnp.min(sigma_cart_list[1])), 
+                        vmax=max(jnp.max(sigma_cart_true_list[1]),jnp.max(sigma_cart_list[1])))
+                        
+                log_plot(X, Y, sigma_cart_true_list[3], name="Cartesian/True/True YY stress", log_dir=self.dir.log_dir, step=step,
+                        vmin=min(jnp.min(sigma_cart_true_list[3]),jnp.min(sigma_cart_list[3])), 
+                        vmax=max(jnp.max(sigma_cart_true_list[3]),jnp.max(sigma_cart_list[3])))
+            
+            
+            log_plot(X, Y, jnp.abs(sigma_cart_true_list[0] - sigma_cart_list[0]), name="Cartesian/Error/XX stress error", log_dir=self.dir.log_dir, step=step, log=True)
+            
+            log_plot(X, Y, jnp.abs(sigma_cart_true_list[1] - sigma_cart_list[1]), name="Cartesian/Error/XY stress error", log_dir=self.dir.log_dir, step=step, log=True)
+
+            log_plot(X, Y, jnp.abs(sigma_cart_true_list[3] - sigma_cart_list[3]), name="Cartesian/Error/YY stress error", log_dir=self.dir.log_dir, step=step, log=True)
+            
+            
+            
+            
+            # Log polar plots
+            log_plot(X, Y, sigma_polar_list[0], name="Polar/Surrogate/RR stress", log_dir=self.dir.log_dir, step=step,
+                    vmin=min(jnp.min(sigma_polar_true_list[0]),jnp.min(sigma_polar_list[0])), 
+                    vmax=max(jnp.max(sigma_polar_true_list[0]),jnp.max(sigma_polar_list[0])))
+            
+            log_plot(X, Y, sigma_polar_list[1], name="Polar/Surrogate/RT stress", log_dir=self.dir.log_dir, step=step,
+                    vmin=min(jnp.min(sigma_polar_true_list[1]),jnp.min(sigma_polar_list[1])), 
+                    vmax=max(jnp.max(sigma_polar_true_list[1]),jnp.max(sigma_polar_list[1])))
+                    
+            log_plot(X, Y, sigma_polar_list[3], name="Polar/Surrogate/TT stress", log_dir=self.dir.log_dir, step=step,
+                    vmin=min(jnp.min(sigma_polar_true_list[3]),jnp.min(sigma_polar_list[3])), 
+                    vmax=max(jnp.max(sigma_polar_true_list[3]),jnp.max(sigma_polar_list[3])))
+            
+            # These are redundant after first time being logged
+            if step == 0:
+                log_plot(X, Y, sigma_polar_true_list[0], name="Polar/True/True RR stress", log_dir=self.dir.log_dir, step=step,
+                        vmin=min(jnp.min(sigma_polar_true_list[0]),jnp.min(sigma_polar_list[0])), 
+                        vmax=max(jnp.max(sigma_polar_true_list[0]),jnp.max(sigma_polar_list[0])))
+                
+                log_plot(X, Y, sigma_polar_true_list[1], name="Polar/True/True RT stress", log_dir=self.dir.log_dir, step=step,
+                        vmin=min(jnp.min(sigma_polar_true_list[1]),jnp.min(sigma_polar_list[1])), 
+                        vmax=max(jnp.max(sigma_polar_true_list[1]),jnp.max(sigma_polar_list[1])))
+                        
+                log_plot(X, Y, sigma_polar_true_list[3], name="Polar/True/True TT stress", log_dir=self.dir.log_dir, step=step,
+                        vmin=min(jnp.min(sigma_polar_true_list[3]),jnp.min(sigma_polar_list[3])), 
+                        vmax=max(jnp.max(sigma_polar_true_list[3]),jnp.max(sigma_polar_list[3])))
+            
+            
+            log_plot(X, Y, jnp.abs(sigma_polar_true_list[0] - sigma_polar_list[0]), name="Polar/Error/RR stress error", log_dir=self.dir.log_dir, step=step, log=True)
+            
+            log_plot(X, Y, jnp.abs(sigma_polar_true_list[1] - sigma_polar_list[1]), name="Polar/Error/RT stress error", log_dir=self.dir.log_dir, step=step, log=True)
+
+            log_plot(X, Y, jnp.abs(sigma_polar_true_list[3] - sigma_polar_list[3]), name="Polar/Error/TT stress error", log_dir=self.dir.log_dir, step=step, log=True)
+
+        
+        
+        # pwhplot.plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list,
+        #                     fig_dir=self.dir.figure_dir, name="stress", radius=radius,
+        #                     log_dir=self.dir.log_dir, save=save, log=log, step=step)
+        # pwhplot.plot_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list,
+        #                         fig_dir=self.dir.figure_dir, name="stress_polar",
+        #                         log_dir=self.dir.log_dir, save=save, log=log, step=step)
         return

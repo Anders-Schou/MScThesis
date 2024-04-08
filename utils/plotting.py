@@ -3,6 +3,7 @@ import os
 import jax.numpy as jnp
 import jax.tree_util as jtu
 import matplotlib.pyplot as plt
+from torch.utils.tensorboard import SummaryWriter
 
 
 def save_fig(dir: str, file_name: str, format: str = "png", clear = False):
@@ -11,6 +12,12 @@ def save_fig(dir: str, file_name: str, format: str = "png", clear = False):
     plt.savefig(os.path.join(dir, file_name), format=format, bbox_inches="tight")
     if clear:
         plt.clf()
+    return
+
+def log_img(dir: str, file_name: str, image_tensor, step=None):
+    writer = SummaryWriter(log_dir=dir)
+    writer.add_image(file_name, image_tensor, global_step=step)
+    writer.close()
     return
 
 
