@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import flax.linen as nn
 import optax
 
+
 class Settings:
     pass
 
@@ -24,11 +25,40 @@ class SettingsNotSupportedError(Exception):
 
 
 @dataclass
+class VerbositySettings:
+    init: bool = True,
+    training: bool = True,
+    evaluation: bool = True,
+    plotting: bool = True,
+    sampling: bool = True
+
+
+@dataclass
 class SupportedActivations:
     tanh: Callable = nn.tanh
     sigmoid: Callable = nn.sigmoid
     silu: Callable = nn.silu
     swish: Callable = nn.silu
+    sin: Callable = jax.jit(jnp.sin)
+    cos: Callable = jax.jit(jnp.cos)
+
+
+@dataclass
+class SupportedCustomInitializers:
+    """
+    Besides these, all functions from the
+    flax.linen.initializers module are supported.
+    """
+    pass
+
+
+@dataclass
+class SupportedCustomOptimizerSchedules:
+    """
+    Besides these, all functions from the
+    optax.schedules module are supported.
+    """
+    pass
 
 
 @dataclass
@@ -67,12 +97,14 @@ class TrainingSettings(Settings):
     sampling: dict
     iterations: int = 1000
     optimizer: Callable = SupportedOptimizers.adam
+    update_scheme: str = "unweighted"
     learning_rate: float = 1e-3
     batch_size: int | None = None
     decay_rate: float | None = None
     decay_steps: int | None = None
     transfer_learning: bool = False
     resampling: dict | None = None
+    jitted_update: bool = True
 
 
 @dataclass

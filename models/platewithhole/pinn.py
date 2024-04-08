@@ -124,7 +124,7 @@ class PWHPINN(PINN):
         ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
         train_sampling = self.train_settings.sampling if self.do_train is not None else None
         eval_sampling = self.eval_settings.sampling if self.do_eval is not None else None
-
+        
         # Sampling points in domain and on boundaries
         self.train_points = generate_rectangle_with_hole(train_key, radius, xlim, ylim,
                                                          train_sampling["coll"],
@@ -135,6 +135,13 @@ class PWHPINN(PINN):
                                                         eval_sampling["rect"],
                                                         eval_sampling["circ"])
         
+        # Generate data points
+        self._key, data_train_key, data_eval_key = jax.random.split(self._key, 3)
+        self.train_points["data"] = generate_collocation_points_with_hole(data_train_key, radius,
+                                                                          xlim, ylim, train_sampling.get("data"))
+        self.eval_points["data"] = generate_collocation_points_with_hole(data_eval_key, radius,
+                                                                         xlim, ylim, eval_sampling.get("data"))
+
         # Get corresponding function values
         self.train_true_val = analytic.get_true_vals(self.train_points, ylim=ylim)
         self.eval_true_val = analytic.get_true_vals(self.eval_points, ylim=ylim)
@@ -152,7 +159,7 @@ class PWHPINN(PINN):
         radius = self.geometry_settings["domain"]["circle"]["radius"]
         xlim = self.geometry_settings["domain"]["rectangle"]["xlim"]
         ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
-        self._key, resample_key = jax.random.split(self._key)
+        self._key, resample_key, perm_key = jax.random.split(self._key, 3)
         
         # Get resample parameters
         loss_emphasis = self.train_settings.resampling["loss_emphasis"]
@@ -168,7 +175,7 @@ class PWHPINN(PINN):
 
         # Generate points and choose the ones with highest loss
         new_coll = generate_collocation_points_with_hole(resample_key, radius, xlim, ylim, resample_points)
-
+        
         # Get true values of new collocation points
         new_true = analytic.get_true_vals(self.train_points, exclude=["rect", "circ", "diri"])["coll"]
         
@@ -180,12 +187,13 @@ class PWHPINN(PINN):
 
         # Set new training points
         self.train_points["coll"].at[:sum(resample_num)].set(new_coll)
+        self.train_points["coll"] = jax.random.permutation(perm_key, self.train_points["coll"])
 
         # Recalculate true values for collocation points
         self.train_true_val["coll"] = analytic.get_true_vals(self.train_points, exclude=["rect", "circ", "diri"])["coll"]
         return
     
-    def get_plot_data_cart(self):
+    def get_plot_data(self):
         radius = self.geometry_settings["domain"]["circle"]["radius"]
         xlim = self.geometry_settings["domain"]["rectangle"]["xlim"]
         ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
@@ -227,7 +235,7 @@ class PWHPINN(PINN):
     
     def plot_results(self, save=True, log=False, step=None):
         
-        X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = self.get_plot_data_cart()
+        X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = self.get_plot_data()
         radius = self.geometry_settings["domain"]["circle"]["radius"]
         
         if save:

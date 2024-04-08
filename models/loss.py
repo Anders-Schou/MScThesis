@@ -1,10 +1,5 @@
-from collections.abc import Callable
-
 import jax
 import jax.numpy as jnp
-
-from models import networks
-from setup.parsers import parse_loss_type
 
 
 def sq(r: jax.Array) -> jax.Array:

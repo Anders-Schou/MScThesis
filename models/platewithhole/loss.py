@@ -73,3 +73,12 @@ def loss_dirichlet(*output: jax.Array, true_val: dict[str, jax.Array] | None = N
            mse(out1, true_val.get("di1")), \
            mse(out2, true_val.get("di2")), \
            mse(out3, true_val.get("di3"))
+
+
+def loss_data(output: jax.Array, true_val: dict[str, jax.Array] | None = None):
+
+    if true_val is None:
+        return mse(output[:, 3]), mse(output[:, 1]), mse(output[:, 0])
+    return mse( output[:, 3], true_val.get("true_xx")), \
+           mse(-output[:, 1], true_val.get("true_xy")), \
+           mse( output[:, 0], true_val.get("true_yy")),

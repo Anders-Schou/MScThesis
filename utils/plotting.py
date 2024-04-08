@@ -2,16 +2,22 @@ import os
 
 import jax.numpy as jnp
 import jax.tree_util as jtu
+from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 
 
-def save_fig(dir: str, file_name: str, format: str = "png", clear = False):
+def save_fig(dir: str, file_name: str, format: str = "png",
+             fig: Figure | None = None, clear = True, close = True):
     if not file_name.endswith("." + format):
         file_name += ("." + format)
-    plt.savefig(os.path.join(dir, file_name), format=format, bbox_inches="tight")
+    if fig is None:
+        fig = plt.gcf()
+    fig.savefig(os.path.join(dir, file_name), format=format, bbox_inches="tight")
     if clear:
         plt.clf()
+    if close:
+        plt.close(fig)
     return
 
 def log_img(dir: str, file_name: str, image_tensor, step=None):

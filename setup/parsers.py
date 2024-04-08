@@ -4,11 +4,13 @@ from collections.abc import Callable
 import pathlib
 
 import jax
-import jax.numpy as jnp
+import jax.tree_util as jtu
 import flax.linen as nn
+import optax
 
-from setup.settings import (settings2dict, MLPSettings, TrainingSettings, EvaluationSettings,
+from setup.settings import (settings2dict, VerbositySettings, MLPSettings, TrainingSettings, EvaluationSettings,
                             DirectorySettings, SupportedActivations, SupportedOptimizers,
+                            SupportedCustomOptimizerSchedules, SupportedCustomInitializers,
                             SettingsInterpretationError, SettingsNotSupportedError)
 from utils.utils import log_settings
 
@@ -34,17 +36,44 @@ def parse_arguments() -> dict:
     return json_dict
 
 
-def parse_loss_type(loss_str: str) -> Callable:
-    """
-    Based on input string, this function returns a function
-    for calculating the outer loss, e.g. a mean-squared error.
-    """
-    from models.loss import mse
+def parse_verbosity_settings(settings_dict: dict | None = None):
+    if settings_dict is None:
+        return VerbositySettings()
+    if settings_dict.get("all") is not None:
+        return VerbositySettings()
+    return VerbositySettings(**settings_dict)
+
+
+# def parse_loss_type(loss_str: str) -> Callable:
+#     """
+#     Based on input string, this function returns a function
+#     for calculating the outer loss, e.g. a mean-squared error.
+#     """
+#     from models.loss import mse
     
-    loss_str = loss_str.lower()
-    if loss_str == "mse":
-        return mse
-    raise ValueError(f"Loss of type '{loss_str}' is not supported.")
+#     loss_str = loss_str.lower()
+#     if loss_str == "mse":
+#         return mse
+#     raise ValueError(f"Loss of type '{loss_str}' is not supported.")
+
+
+def parse_run_settings(settings_dict: dict, run_type: str):
+    settings_dict = settings_dict.copy()
+    if run_type == "train":
+        if "train" in settings_dict.keys():
+            train_settings = parse_training_settings(settings_dict["train"])
+            do_train = True
+        if "do_train" in settings_dict.keys():
+            do_train = settings_dict["do_train"]
+        return train_settings, do_train
+    if run_type == "eval":
+        if "eval" in settings_dict.keys():
+            eval_settings = parse_evaluation_settings(settings_dict["eval"])
+            do_eval = True
+        if "do_eval" in settings_dict.keys():
+            do_train = settings_dict["do_eval"]
+        return eval_settings, do_eval
+    raise ValueError(f"Invalid run type: '{run_type}'.")
 
 
 def parse_MLP_settings(settings_dict: dict) -> dict:
@@ -149,6 +178,10 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     if settings_dict.get("optimizer") is not None:
         settings.optimizer = convert_optimizer(settings_dict["optimizer"])
     
+    # update_scheme
+    if settings_dict.get("update_scheme") is not None:
+        settings.optimizer = settings_dict["update_scheme"]
+    
     # learning_rate
     if settings_dict.get("learning_rate") is not None:
         settings.learning_rate = settings_dict["learning_rate"]
@@ -173,6 +206,9 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     if settings_dict.get("resampling") is not None:
         settings.resampling = settings_dict["resampling"]
 
+    # jitted_update
+    if settings_dict.get("jitted_update") is not None:
+        settings.jitted_update = settings_dict["jitted_update"]
 
     # # Load settings from dictionary into settings class
     # for key, value in settings_dict.items():
@@ -209,12 +245,20 @@ def parse_evaluation_settings(settings_dict: dict) -> EvaluationSettings:
     return settings
 
 
-def parse_directory_settings(dir: DirectorySettings, id: str) -> DirectorySettings:
+def parse_directory_settings(settings_dict: dict, id: str) -> DirectorySettings:
     """
     Parses settings related to file directories.
 
+    Only base_dir is required in the settings_dict.
+    Other dirs will be generated from base_dir if not specified.
+
     Returns a DirectorySettings object.
     """
+
+    dir = DirectorySettings(**jtu.tree_map(
+        lambda path_str: pathlib.Path(path_str), settings_dict)
+        )
+
     if dir.figure_dir is None:
         setattr(dir, "figure_dir", dir.base_dir / "figures")
     dir.figure_dir = dir.figure_dir / id
@@ -231,6 +275,10 @@ def parse_directory_settings(dir: DirectorySettings, id: str) -> DirectorySettin
         setattr(dir, "log_dir", dir.base_dir / "logs")
     dir.log_dir = dir.log_dir / id
 
+    # Create directories if needed
+    for d in dir.__dict__.values():
+        d.mkdir(parents=True, exist_ok=True)
+    
     return dir
 
 
@@ -241,7 +289,7 @@ def convert_activation(act_str: str) -> Callable:
     """
     try:
         act_fun = getattr(SupportedActivations, act_str)
-    except Exception as err:
+    except AttributeError as err:
         raise SettingsNotSupportedError(
             f"Activation function '{act_str} is not supported.") from err
     return act_fun
@@ -254,9 +302,12 @@ def convert_initialization(init_str: list[str]) -> list[Callable]:
     """
     try:
         init_fun = getattr(nn.initializers, init_str)
-    except Exception as err:
-        raise SettingsNotSupportedError(
-            f"Initialization '{init_str} is not supported.") from err
+    except AttributeError:
+        try:
+            init_fun = getattr(SupportedCustomInitializers, init_str)
+        except AttributeError as err:
+            raise SettingsNotSupportedError(
+                f"Initialization '{init_str} is not supported.") from err
     return init_fun
 
 
@@ -266,10 +317,25 @@ def convert_optimizer(opt_str: str):
     """
     try:
         opt_fun = getattr(SupportedOptimizers, opt_str)
-    except Exception as err:
+    except AttributeError as err:
         raise SettingsNotSupportedError(
             f"Optimizer '{opt_str}' is not supported.") from err
     return opt_fun
+
+
+def convert_schedule(schedule_str: str):
+    """
+    Converts optimizer schedule string to optimizer schedule object.
+    """
+    try:
+        schedule_fun = getattr(optax.schedules, schedule_str)
+    except AttributeError:
+        try:
+            schedule_fun = getattr(SupportedCustomOptimizerSchedules, schedule_str)
+        except AttributeError as err:
+            raise SettingsNotSupportedError(
+                f"Optimizer schedule '{schedule_str}' is not supported.") from err
+    return schedule_fun
 
 
 def convert_sampling_distribution(dist_str: str) -> Callable:
@@ -278,7 +344,7 @@ def convert_sampling_distribution(dist_str: str) -> Callable:
     """
     try:
         dist_fun = getattr(jax.random, dist_str)
-    except Exception as err:
+    except AttributeError as err:
         raise SettingsNotSupportedError(
             f"Sampling distribution '{dist_str}' is not supported.") from err
     return dist_fun

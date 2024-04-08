@@ -77,11 +77,14 @@ def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
                                           radius: float, 
                                           xlim: Sequence[float],
                                           ylim: Sequence[float],
-                                          points: int | Sequence[int]
+                                          points: int | Sequence[int] | None
                                           ):
     """
     This function samples points in the inner of the domain.
     """
+    if points is None:
+        return jnp.empty((0,))
+
     if not isinstance(points, Sequence):
         points = [points]
     
@@ -143,9 +146,10 @@ def generate_rectangle_with_hole(key: jax.random.PRNGKey,
     """
 
 
-    key, rectkey, circkey, collkey = jax.random.split(key, 4)
+    key, rectkey, circkey, collkey, permkey = jax.random.split(key, 5)
 
     xy_coll = generate_collocation_points_with_hole(collkey, radius, xlim, ylim, num_coll)
+    xy_coll = jax.random.permutation(permkey, xy_coll)
     xy_rect = generate_rectangle_points(rectkey, xlim, ylim, num_rect)
     xy_circ = generate_circle_points(circkey, radius, num_circ)
     # xy_test = generate_collocation_points_with_hole(testkey, radius, xlim, ylim, num_test)

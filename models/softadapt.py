@@ -32,7 +32,8 @@ def softadapt(order: int = 6,
               beta: float = 0.1,
               normalized: bool = False,
               loss_weighted: bool = False,
-              delta_time: float | None = None
+              delta_time: float | None = None,
+              shift_by_max_val: bool = True
               ):
     """
     Function implementing the SoftAdapt algorithm.

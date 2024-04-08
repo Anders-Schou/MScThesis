@@ -1,15 +1,12 @@
 from abc import ABCMeta, abstractmethod
-import pathlib
 import inspect
 
 import jax
 import jax.numpy as jnp
-import jax.tree_util as jtu
-from flax.training import checkpoints
-import orbax.checkpoint as ocp
+from flax.training import checkpoints # TODO:
+import orbax.checkpoint as ocp        # Create model saver/loader
 
-from setup.settings import DirectorySettings, TrainingSettings, EvaluationSettings
-from setup.parsers import parse_training_settings, parse_evaluation_settings, parse_directory_settings
+from setup.parsers import  parse_directory_settings, parse_run_settings, parse_verbosity_settings
 
 
 class Model(metaclass=ABCMeta):
@@ -20,7 +17,7 @@ class Model(metaclass=ABCMeta):
         """
         Initialize the model by calling the settings parsers.
         """
-        # Parse various settings such as training/evaluation, plotting and IO
+        
         self._parse_settings(settings)
         return
 
@@ -28,11 +25,23 @@ class Model(metaclass=ABCMeta):
         """
         Parse various settings.
         """
-        # Parse directory settings
-        self._parse_directory_settings(settings["io"], settings["id"])
-        # Parse run settings
+        
+        # Parse verbosity, seed and ID
+        self._verbose = parse_verbosity_settings(settings.get("verbosity"))
+        self._seed = settings.get("seed")
+        if self._seed is None:
+            if self._verbose.init:
+                print("No seed specified in settings. Seed is set to 0.")
+            self._seed = 0
+        self._id = settings.get("id")
+        if self._id is None:
+            if self._verbose.init:
+                print("No ID specified in settings. ID is set to 'generic_id'.")
+            self._id = "generic_id"
+
+        # Parse more settings
+        self._parse_directory_settings(settings["io"], self._id)
         self._parse_run_settings(settings["run"])
-        # Parse plot settings
         self._parse_plot_settings(settings["plotting"])
         return
 
@@ -40,26 +49,24 @@ class Model(metaclass=ABCMeta):
         """
         Parse settings related to file directories.
         """
-        dir = DirectorySettings(**jtu.tree_map(pathlib.Path, dir_settings))
-        self.dir = parse_directory_settings(dir, id)
-        for d in self.dir.__dict__.values():
-            d.mkdir(parents=True, exist_ok=True)
+
+        self.dir = parse_directory_settings(dir_settings, id)
         return
 
     def _parse_run_settings(self, run_settings: dict) -> None:
         """
         Parse settings related to the type of run.
         """
-        self.do_train = "train" in run_settings.keys()
-        self.do_eval = "eval" in run_settings.keys()
-        self.train_settings = parse_training_settings(run_settings["train"]) if self.do_train else None
-        self.eval_settings = parse_evaluation_settings(run_settings["eval"]) if self.do_eval else None
+
+        self.train_settings, self.do_train = parse_run_settings(run_settings, run_type="train")
+        self.eval_settings, self.do_eval = parse_run_settings(run_settings, run_type="eval")
         return
     
     def _parse_plot_settings(self, plot_settings: dict) -> None:
         """
         Parse settings related to plotting.
         """
+
         self.do_sample_data_plots = plot_settings["do_sample_data_plots"]
         return
 
@@ -72,15 +79,17 @@ class Model(metaclass=ABCMeta):
 
     def save_state(self):
         """
-        Save model state. Call to write_model() ...
+        Save model state. Call to a more general function write_model() ...
         """
-        pass
+
+        raise NotImplementedError("Method for saving model state is not implemented.")
 
     def load_state(self):
         """
         Load model state.
         """
-        pass
+        
+        raise NotImplementedError("Method for loading model state is not implemented.")
     
     @abstractmethod
     def loss_terms(self) -> jax.Array:

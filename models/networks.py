@@ -4,7 +4,7 @@ from collections.abc import Callable
 import jax
 import flax.linen as nn
 
-from setup.parsers import parse_MLP_settings, parse_training_settings
+from setup.parsers import parse_MLP_settings, parse_training_settings, parse_evaluation_settings
 
 
 def netmap(model: Callable, **kwargs) -> Callable:
@@ -14,17 +14,7 @@ def netmap(model: Callable, **kwargs) -> Callable:
     return jax.vmap(model, in_axes=(None, 0), **kwargs)
 
 
-def setup_run_settings(run_settings: dict, run_type: str):
-    run_settings = run_settings.copy()
-    if run_type == "train":
-        train_settings = parse_training_settings(run_settings["train"])
-        return train_settings
-    if run_type == "eval":
-        raise NotImplementedError("Evaluation run is not implemented yet.")
-    raise ValueError(f"Invalid run type: '{run_type}'.")
-
-
-def setup_network(network_settings: dict):
+def setup_network(network_settings: dict[str, str | dict]):
     arch = network_settings["architecture"].lower()
     if  arch == "mlp":
         parsed_settings = parse_MLP_settings(network_settings["specifications"])
@@ -75,6 +65,6 @@ class MLP(nn.Module):
         s += f"output_dim:       {self.output_dim}\n"
         s += f"hidden_dims:      {self.hidden_dims}\n"
         s += f"activation:       {[f.__name__ for f in self.activation]}\n"
-        s += f"initialization:   {[f.__name__ for f in self.activation]}\n"
+        s += f"initialization:   {[f.__name__ for f in self.initialization]}\n"
         s += f"\n"
         return s

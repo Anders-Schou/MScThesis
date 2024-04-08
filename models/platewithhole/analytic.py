@@ -77,12 +77,35 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
     if "coll" not in exclude:
         coll = None
         vals["coll"] = coll
+
+    # True stresses in domain
+    if "data" not in exclude:
+        true_data = jax.vmap(cart_stress_true)(points["data"])
+        vals["data"] = {}
+        vals["data"]["true_xx"] = true_data[:, 0, 0]
+        vals["data"]["true_xy"] = true_data[:, 0, 1]
+        vals["data"]["true_yy"] = true_data[:, 1, 1]
     
     # Only inhomogeneous BCs at two sides of rectangle
     if "rect" not in exclude:
-        rect_points = [p.shape[0] for p in points["rect"]]
-        rect = {"yy1": jnp.full((rect_points[1],), _TENSION),
-                "yy3": jnp.full((rect_points[3],), _TENSION)}
+        # rect_points = [p.shape[0] for p in points["rect"]]
+        # rect = {"yy1": jnp.full((rect_points[1],), _TENSION),
+        #         "yy3": jnp.full((rect_points[3],), _TENSION)}
+        
+        true_rect = [jax.vmap(cart_stress_true)(points["rect"][i]) for i in range(4)]
+
+        rect = {
+                "xx0":  true_rect[0][:, 1, 1],
+                "xy0": -true_rect[0][:, 0, 1],
+                "yy1":  true_rect[1][:, 0, 0],
+                "xy1": -true_rect[1][:, 1, 0],
+                "xx2":  true_rect[2][:, 1, 1],
+                "xy2": -true_rect[2][:, 0, 1],
+                "yy3":  true_rect[3][:, 0, 0],
+                "xy3": -true_rect[3][:, 1, 0],
+                }
+
+
         vals["rect"] = rect
     
     # Homogeneous BC at inner circle
