@@ -5,7 +5,9 @@ import jax.tree_util as jtu
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
+import numpy as np
 
+_CLEVELS = 101
 
 def save_fig(dir: str, file_name: str, format: str = "png",
              fig: Figure | None = None, clear = True, close = True):
@@ -59,3 +61,18 @@ def get_plot_variables(xlim, ylim, grid = 201):
     X, Y = jnp.meshgrid(x, y)
     plotpoints = jnp.concatenate((X.reshape((-1, 1)), Y.reshape((-1, 1))), axis=1)
     return X, Y, plotpoints
+
+
+def log_plot(X, Y, Z, name, log_dir, step=None, vmin=None, vmax=None, logscale=False):
+    fig = plt.figure(figsize=(10,10), dpi=50)
+    p = plt.contourf(X, Y, Z, vmin=vmin, vmax=vmax, levels=_CLEVELS)
+    plt.colorbar(p, ax=plt.gca())
+    fig.canvas.draw()
+    
+    data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    w, h = fig.canvas.get_width_height()
+    data2 = data.reshape((int(h), int(w), -1))
+    im = data2.transpose((2, 0, 1))
+    
+    log_img(log_dir, name, im, step=step)
+    plt.close()

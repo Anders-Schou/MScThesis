@@ -1,1 +1,1 @@
-python main.py --settings="settings.json"
+python experiments/$1/main.py --settings="experiments/$1/settings.json" 

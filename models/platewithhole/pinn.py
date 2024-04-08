@@ -6,7 +6,6 @@ import jax.numpy as jnp
 
 from . import analytic
 from . import plotting as pwhplot
-from .plotting import log_plot
 
 from datahandlers.generators import (
     generate_rectangle_with_hole,
@@ -198,8 +197,8 @@ class PWHPINN(PINN):
         xlim = self.geometry_settings["domain"]["rectangle"]["xlim"]
         ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
 
-        X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=51)
-        R, THETA, plotpoints_polar = get_plot_variables([radius, _OUTER_RADIUS], [0, 4*jnp.pi], grid=51)
+        X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=101)
+        R, THETA, plotpoints_polar = get_plot_variables([radius, _OUTER_RADIUS], [0, 4*jnp.pi], grid=101)
         plotpoints2 = jax.vmap(rtheta2xy)(plotpoints_polar)
         
         assert(jnp.allclose(plotpoints, vrtheta2xy(vxy2rtheta(plotpoints)), atol=1e-4))
@@ -239,86 +238,10 @@ class PWHPINN(PINN):
         radius = self.geometry_settings["domain"]["circle"]["radius"]
         
         if save:
-            # save_results()
-            pass
+            pwhplot.plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=self.dir.figure_dir, name="Cart_stress", radius=radius)
+            pwhplot.plot_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list, fig_dir=self.dir.figure_dir, name="Polar_stress")
         if log:        
-            # Log cartesian plots
-            log_plot(X, Y, sigma_cart_list[0], name="Cartesian/Surrogate/XX stress", log_dir=self.dir.log_dir, step=step,
-                    vmin=min(jnp.min(sigma_cart_true_list[0]),jnp.min(sigma_cart_list[0])), 
-                    vmax=max(jnp.max(sigma_cart_true_list[0]),jnp.max(sigma_cart_list[0])))
-            
-            log_plot(X, Y, sigma_cart_list[1], name="Cartesian/Surrogate/XY stress", log_dir=self.dir.log_dir, step=step,
-                    vmin=min(jnp.min(sigma_cart_true_list[1]),jnp.min(sigma_cart_list[1])), 
-                    vmax=max(jnp.max(sigma_cart_true_list[1]),jnp.max(sigma_cart_list[1])))
-                    
-            log_plot(X, Y, sigma_cart_list[3], name="Cartesian/Surrogate/YY stress", log_dir=self.dir.log_dir, step=step,
-                    vmin=min(jnp.min(sigma_cart_true_list[3]),jnp.min(sigma_cart_list[3])), 
-                    vmax=max(jnp.max(sigma_cart_true_list[3]),jnp.max(sigma_cart_list[3])))
-            
-            # These are redundant after first time being logged
-            if step == 0:
-                log_plot(X, Y, sigma_cart_true_list[0], name="Cartesian/True/True XX stress", log_dir=self.dir.log_dir, step=step,
-                        vmin=min(jnp.min(sigma_cart_true_list[0]),jnp.min(sigma_cart_list[0])), 
-                        vmax=max(jnp.max(sigma_cart_true_list[0]),jnp.max(sigma_cart_list[0])))
-                
-                log_plot(X, Y, sigma_cart_true_list[1], name="Cartesian/True/True XY stress", log_dir=self.dir.log_dir, step=step,
-                        vmin=min(jnp.min(sigma_cart_true_list[1]),jnp.min(sigma_cart_list[1])), 
-                        vmax=max(jnp.max(sigma_cart_true_list[1]),jnp.max(sigma_cart_list[1])))
-                        
-                log_plot(X, Y, sigma_cart_true_list[3], name="Cartesian/True/True YY stress", log_dir=self.dir.log_dir, step=step,
-                        vmin=min(jnp.min(sigma_cart_true_list[3]),jnp.min(sigma_cart_list[3])), 
-                        vmax=max(jnp.max(sigma_cart_true_list[3]),jnp.max(sigma_cart_list[3])))
-            
-            
-            log_plot(X, Y, jnp.abs(sigma_cart_true_list[0] - sigma_cart_list[0]), name="Cartesian/Error/XX stress error", log_dir=self.dir.log_dir, step=step, log=True)
-            
-            log_plot(X, Y, jnp.abs(sigma_cart_true_list[1] - sigma_cart_list[1]), name="Cartesian/Error/XY stress error", log_dir=self.dir.log_dir, step=step, log=True)
+            pwhplot.log_stress(X, Y, sigma_cart_list, sigma_cart_true_list, log_dir=self.dir.log_dir, name="Cart_stress")
+            pwhplot.log_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list, log_dir=self.dir.log_dir, name="Polar_stress")
 
-            log_plot(X, Y, jnp.abs(sigma_cart_true_list[3] - sigma_cart_list[3]), name="Cartesian/Error/YY stress error", log_dir=self.dir.log_dir, step=step, log=True)
-            
-            
-            
-            
-            # Log polar plots
-            log_plot(X, Y, sigma_polar_list[0], name="Polar/Surrogate/RR stress", log_dir=self.dir.log_dir, step=step,
-                    vmin=min(jnp.min(sigma_polar_true_list[0]),jnp.min(sigma_polar_list[0])), 
-                    vmax=max(jnp.max(sigma_polar_true_list[0]),jnp.max(sigma_polar_list[0])))
-            
-            log_plot(X, Y, sigma_polar_list[1], name="Polar/Surrogate/RT stress", log_dir=self.dir.log_dir, step=step,
-                    vmin=min(jnp.min(sigma_polar_true_list[1]),jnp.min(sigma_polar_list[1])), 
-                    vmax=max(jnp.max(sigma_polar_true_list[1]),jnp.max(sigma_polar_list[1])))
-                    
-            log_plot(X, Y, sigma_polar_list[3], name="Polar/Surrogate/TT stress", log_dir=self.dir.log_dir, step=step,
-                    vmin=min(jnp.min(sigma_polar_true_list[3]),jnp.min(sigma_polar_list[3])), 
-                    vmax=max(jnp.max(sigma_polar_true_list[3]),jnp.max(sigma_polar_list[3])))
-            
-            # These are redundant after first time being logged
-            if step == 0:
-                log_plot(X, Y, sigma_polar_true_list[0], name="Polar/True/True RR stress", log_dir=self.dir.log_dir, step=step,
-                        vmin=min(jnp.min(sigma_polar_true_list[0]),jnp.min(sigma_polar_list[0])), 
-                        vmax=max(jnp.max(sigma_polar_true_list[0]),jnp.max(sigma_polar_list[0])))
-                
-                log_plot(X, Y, sigma_polar_true_list[1], name="Polar/True/True RT stress", log_dir=self.dir.log_dir, step=step,
-                        vmin=min(jnp.min(sigma_polar_true_list[1]),jnp.min(sigma_polar_list[1])), 
-                        vmax=max(jnp.max(sigma_polar_true_list[1]),jnp.max(sigma_polar_list[1])))
-                        
-                log_plot(X, Y, sigma_polar_true_list[3], name="Polar/True/True TT stress", log_dir=self.dir.log_dir, step=step,
-                        vmin=min(jnp.min(sigma_polar_true_list[3]),jnp.min(sigma_polar_list[3])), 
-                        vmax=max(jnp.max(sigma_polar_true_list[3]),jnp.max(sigma_polar_list[3])))
-            
-            
-            log_plot(X, Y, jnp.abs(sigma_polar_true_list[0] - sigma_polar_list[0]), name="Polar/Error/RR stress error", log_dir=self.dir.log_dir, step=step, log=True)
-            
-            log_plot(X, Y, jnp.abs(sigma_polar_true_list[1] - sigma_polar_list[1]), name="Polar/Error/RT stress error", log_dir=self.dir.log_dir, step=step, log=True)
-
-            log_plot(X, Y, jnp.abs(sigma_polar_true_list[3] - sigma_polar_list[3]), name="Polar/Error/TT stress error", log_dir=self.dir.log_dir, step=step, log=True)
-
-        
-        
-        # pwhplot.plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list,
-        #                     fig_dir=self.dir.figure_dir, name="stress", radius=radius,
-        #                     log_dir=self.dir.log_dir, save=save, log=log, step=step)
-        # pwhplot.plot_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list,
-        #                         fig_dir=self.dir.figure_dir, name="stress_polar",
-        #                         log_dir=self.dir.log_dir, save=save, log=log, step=step)
         return
