@@ -1,13 +1,15 @@
 from functools import wraps
-import warnings
 
 from scipy.special import gamma
 import jax
 import jax.numpy as jnp
 
 
-def backwards_fdm_coeff(order: int):
-    lins = jnp.linspace(0, -order, order+1).reshape(-1, 1)
+_SOFTMAX_TOLERANCE = 1e-8
+
+
+def backwards_fdm_coeff(order: int) -> jax.Array:
+    lins = jnp.linspace(0, order, order+1).reshape(-1, 1)
     exponents = jnp.linspace(0, order, order+1)
     powers = jnp.power(lins, exponents)
     factorials = jnp.array([gamma(i+1) for i in range(order+1)])
@@ -16,7 +18,10 @@ def backwards_fdm_coeff(order: int):
     return jnp.linalg.solve(M.T, RHS)
 
 
-def softmax(input, beta: float = 0.1, numerator_weights = None, shift_by_max_value = True):
+def softmax(input: jax.Array, beta: float = 0.1,
+            numerator_weights: jax.Array | None = None,
+            shift_by_max_value: bool = True
+            ) -> jax.Array:
     if shift_by_max_value:
         exp_of_input = jnp.exp(beta * (input - jnp.max(input)))
     else:
@@ -25,7 +30,7 @@ def softmax(input, beta: float = 0.1, numerator_weights = None, shift_by_max_val
     if numerator_weights is not None:
         exp_of_input = jnp.multiply(numerator_weights, exp_of_input)
         
-    return exp_of_input / jnp.sum(exp_of_input + 1e-8)
+    return exp_of_input / jnp.sum(exp_of_input + _SOFTMAX_TOLERANCE)
 
 
 def softadapt(order: int = 6,
@@ -47,41 +52,34 @@ def softadapt(order: int = 6,
             ...
 
     """
-    # Get finite difference coefficients for calculating rates of change for loss terms
-    fdm_coeff = backwards_fdm_coeff(order)
+    
 
     def softadapt_decorator(loss_terms):
         """
-        # Initialize variables local to the decorator
-        # call_count = 0
-        # prevlosses = jnp.zeros((order+1, num_loss_terms))
-        # print(f"{num_loss_terms = }")
+        This is the decorator.
         """
+
+        # Get finite difference coefficients for calculating rates of change for loss terms
+        fdm_coeff = jnp.flip(backwards_fdm_coeff(order))
+
+        shift = shift_by_max_val
+        
         @wraps(loss_terms)
         def wrapper(*args, prevlosses=None, **kwargs):
             """
-            # Declare nonlocal variables. These are defined in the decorator function ...
-            # nonlocal call_count, prevlosses
+            This is the wrapper.
             """
+            
             # Calculate losses in original loss_terms function (returns array of loss values)
             losses = loss_terms(*args, **kwargs)
             if prevlosses is None:
                 prevlosses = jnp.tile(losses, order+1).reshape((order+1, losses.shape[0]))
 
-            """
-            # Increase call counter
-            # call_count += 1
-            # print(f"Call count = {call_count}")
-            """
             # Insert newest loss values and push out oldest loss values
             prevlosses = jnp.roll(prevlosses, -1, axis=0).at[-1, :].set(losses)
-            """
-            # Do not use SoftAdapt for the initial calls to the loss function
-            # if call_count <= order:
-            #     return losses, prevlosses, jnp.ones_like(losses), (call_count, prevlosses)
-            """
+            
             # Calculate loss slopes using finite difference
-            rates_of_change = jnp.matmul(fdm_coeff, prevlosses)
+            rates_of_change = -jnp.matmul(fdm_coeff, prevlosses)
             
             # Normalize slopes
             if normalized:
@@ -90,7 +88,7 @@ def softadapt(order: int = 6,
                 rates_of_change = jnp.divide(rates_of_change, delta_time)
 
             # Call custom SoftMax function
-            weights = softmax(rates_of_change, beta=beta)
+            weights = softmax(rates_of_change, beta=beta, shift_by_max_value=shift)
 
             # Weight by loss values
             if loss_weighted:

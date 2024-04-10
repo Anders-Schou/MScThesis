@@ -1,6 +1,18 @@
-from . import Model
-from .optim import get_update
+from typing import override
+from collections import OrderedDict
+
+import numpy as np
+import matplotlib.pyplot as plt
+import jax
+import jax.numpy as jnp
+import jax.tree_util as jtu
 import optax
+from torch.utils.tensorboard import SummaryWriter
+
+from .base import Model
+from .networks import setup_network
+from utils.plotting import save_fig, log_figure
+from utils.utils import timer
 
 
 class PINN(Model):
@@ -45,61 +57,36 @@ class PINN(Model):
 
     def __init__(self, settings: dict, *args, **kwargs):
         super().__init__(settings, *args, **kwargs)
-        if not hasattr(self, "params"):
-            self.params = None
-        self._parse_network_settings(settings["model"]["pinn"]["network"])
+        
         self._parse_geometry_settings(settings["geometry"])
-
-        # self._set_update()
+        self.init_model(settings["model"]["pinn"]["network"])
         return
 
-    def _parse_network_settings(self, network_settings):
-        self.network_settings = network_settings
+    @override
+    def init_model(self, network_settings: list[dict]) -> None:
+        
+        # Number of networks in model
+        num_nets = len(network_settings)
+
+        # Initialize network classes
+        self.net = [setup_network(net) for net in network_settings]
+        
+        # Initialize network parameters
+        self._key, *net_keys = jax.random.split(self._key, num_nets+1)
+        params = [net.init(net_keys[i], jnp.ones((1, net.input_dim))) for i, net in enumerate(self.net)]
+        self.params = {net.name+str(i): params[i] for i, net in enumerate(self.net)}
+
+        # Set optimizer if relevant
+        if self.do_train:
+            self.schedule = optax.exponential_decay(self.train_settings.learning_rate,
+                                                    self.train_settings.decay_steps,
+                                                    self.train_settings.decay_rate)
+            self.optimizer = self.train_settings.optimizer(learning_rate=self.schedule)
+            # self.opt_state = self.optimizer.init(self.params)
+        return
     
     def _parse_geometry_settings(self, geometry_settings):
         self.geometry_settings = geometry_settings
-
-    def _set_loss(self):
-        """
-        Method for setting loss function.
-        """
-        pass
-
-    def _set_update(self, update_fun_name: str, loss_fun_name: str = "total_loss"):
-        """
-        Method for setting update function.
-
-        Currently supported:
-            The usual unweighted update
-            The SoftAdapt update
-        
-        """
-
-        if not self.do_train:
-            if self._verbose.training:
-                print("Update method not set: Model is not set to train.")
-            return
-        
-        # TODO: Remove fixed optimizer and utilize optimizer specified in settings 
-
-        # Set optimizer and initial state
-        self.schedule = optax.exponential_decay(self.train_settings.learning_rate,
-                                                self.train_settings.decay_steps,
-                                                self.train_settings.decay_rate)
-        self.optimizer = self.train_settings.optimizer(learning_rate=self.schedule)
-        # self.opt_state = self.optimizer.init(self.params)
-
-        # Get loss function
-        loss_fun = getattr(self, loss_fun_name)
-
-        # Choose update function
-        update_fun = get_update(loss_fun,
-                                self.optimizer,
-                                update_scheme=self.train_settings.update_scheme,
-                                jit_compile=self.train_settings.jitted_update)
-        
-        # Set update function as method
-        setattr(self, update_fun_name, update_fun)
         return
     
     def predict(self, *args, **kwargs):
@@ -108,4 +95,31 @@ class PINN(Model):
         parameters. For external use.
         """
         return self.forward(self.params, *args, **kwargs)
+
+    def log_scalars(self,
+                params,
+                inputs: dict[str, jax.Array],
+                true_val: dict[str, jax.Array],
+                update_key: int | None = None,
+                step: int | None = None):
+        losses = self._loss_terms(params, inputs, true_val, update_key)
+        writer = SummaryWriter(log_dir=self.dir.log_dir)
         
+        writer.add_scalars('Losses' , {self.loss_names[i]: np.array(losses[i]) for i in range(len(losses))}, global_step=step)
+                
+        writer.close()
+        
+        return
+    
+    @timer
+    def plot_training_points(self, save=True, log=False, step=None):
+        plt.figure()
+        _ = jtu.tree_map_with_path(lambda x, y: plt.scatter(np.array(y)[:,0], np.array(y)[:,1], **self.plot_kwargs[x[0].key]), OrderedDict(self.train_points))
+        
+        if save:
+            save_fig(self.dir.figure_dir, "training_points.png", "png", plt.gcf())
+        
+        if log:
+            log_figure(fig=plt.gcf(), name="training_points", log_dir=self.dir.log_dir, step=step)
+            
+        plt.close()

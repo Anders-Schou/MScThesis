@@ -8,18 +8,18 @@ from utils.transforms import xy2r, xy2theta, xy2rtheta, polar2cart_tensor
 _TENSION = 10
 
 
-def polar_sol_true(r, theta, S = 10, a = 2):
-    a2 = a*a
-    r2 = jnp.square(r)
-    A = -S * 0.25
-    B = 0
-    C = -a2**2 * S * 0.25
-    D = a2 * S * 0.5
-    return (A*r2 + B*r2**2 + C / r2 + D) * jnp.cos(2*theta)
+# def polar_sol_true(r, theta, S = 10, a = 2):
+#     a2 = a*a
+#     r2 = jnp.square(r)
+#     A = -S * 0.25
+#     B = 0
+#     C = -a2**2 * S * 0.25
+#     D = a2 * S * 0.5
+#     return (A*r2 + B*r2**2 + C / r2 + D) * jnp.cos(2*theta)
 
 
-def cart_sol_true(x, y, **kwargs):
-    return polar_sol_true(xy2r(x, y), xy2theta(x, y), **kwargs)
+# def cart_sol_true(x, y, **kwargs):
+#     return polar_sol_true(xy2r(x, y), xy2theta(x, y), **kwargs)
 
 
 def sigma_rr_true(r, theta, S = 10, a = 2):
@@ -68,7 +68,11 @@ def cart_stress_true(xy, **kwargs):
 
 def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | None],
                   exclude: Sequence[str] | None = None,
-                  ylim = None) -> dict[str, jax.Array | dict[str, jax.Array] | None]:
+                  ylim = None,
+                  noise: float | None = None,
+                  level: float = 0.05,
+                  seed: int = 0
+                  ) -> dict[str, jax.Array | dict[str, jax.Array] | None]:
     vals = {}
     if exclude is None:
         exclude = []
@@ -82,9 +86,20 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
     if "data" not in exclude:
         true_data = jax.vmap(cart_stress_true)(points["data"])
         vals["data"] = {}
-        vals["data"]["true_xx"] = true_data[:, 0, 0]
-        vals["data"]["true_xy"] = true_data[:, 0, 1]
-        vals["data"]["true_yy"] = true_data[:, 1, 1]
+        if noise is None:
+            # Exact data
+            vals["data"]["true_xx"] = true_data[:, 0, 0]
+            vals["data"]["true_xy"] = true_data[:, 0, 1]
+            vals["data"]["true_yy"] = true_data[:, 1, 1]
+        else:
+            # Noisy data
+            keys = jax.random.split(jax.random.PRNGKey(seed=seed), 3)
+            vals["data"]["true_xx"] = true_data[:, 0, 0] + \
+                level * jnp.linalg.norm(true_data[:, 0, 0]) * jax.random.normal(keys[0], true_data[:, 0, 0].shape)
+            vals["data"]["true_xy"] = true_data[:, 0, 1] + \
+                level * jnp.linalg.norm(true_data[:, 0, 1]) * jax.random.normal(keys[1], true_data[:, 0, 1].shape)
+            vals["data"]["true_yy"] = true_data[:, 1, 1] + \
+                level * jnp.linalg.norm(true_data[:, 1, 1]) * jax.random.normal(keys[2], true_data[:, 1, 1].shape)
     
     # Only inhomogeneous BCs at two sides of rectangle
     if "rect" not in exclude:

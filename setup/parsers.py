@@ -2,17 +2,30 @@ import json
 import argparse
 from collections.abc import Callable
 import pathlib
+import shutil
 
 import jax
 import jax.tree_util as jtu
 import flax.linen as nn
 import optax
 
-from setup.settings import (settings2dict, VerbositySettings, MLPSettings, TrainingSettings, EvaluationSettings,
-                            DirectorySettings, SupportedActivations, SupportedOptimizers,
-                            SupportedCustomOptimizerSchedules, SupportedCustomInitializers,
-                            SettingsInterpretationError, SettingsNotSupportedError)
-from utils.utils import log_settings
+from setup.settings import (
+    VerbositySettings, 
+    LoggingSettings,
+    MLPSettings,
+    TrainingSettings,
+    EvaluationSettings,
+    PlottingSettings,
+    DirectorySettings,
+    SoftAdaptSettings,
+    SupportedActivations,
+    SupportedOptimizers,
+    SupportedCustomOptimizerSchedules,
+    SupportedCustomInitializers,
+    SettingsInterpretationError,
+    SettingsNotSupportedError,
+    settings2dict
+)
 
 
 def load_json(path: str) -> dict:
@@ -31,8 +44,6 @@ def parse_arguments() -> dict:
     parser.add_argument("--settings", type=str, required=True)
     args = parser.parse_args()
     json_dict = load_json(args.settings)
-    if json_dict["logging"]["do_logging"]:
-        log_settings(json_dict)
     return json_dict
 
 
@@ -43,6 +54,9 @@ def parse_verbosity_settings(settings_dict: dict | None = None):
         return VerbositySettings()
     return VerbositySettings(**settings_dict)
 
+
+def parse_logging_settings(settings_dict: dict):
+    return LoggingSettings(**settings_dict)
 
 # def parse_loss_type(loss_str: str) -> Callable:
 #     """
@@ -56,9 +70,24 @@ def parse_verbosity_settings(settings_dict: dict | None = None):
 #         return mse
 #     raise ValueError(f"Loss of type '{loss_str}' is not supported.")
 
+def parse_plotting_settings(settings_dict: dict | None) -> PlottingSettings:
+    """
+    Parses settings related to plotting.
+    """
 
-def parse_run_settings(settings_dict: dict, run_type: str):
+    if settings_dict is None:
+        return PlottingSettings()
+    return PlottingSettings(**settings_dict)
+
+
+def parse_run_settings(settings_dict: dict, run_type: str
+                       ) -> tuple[TrainingSettings | EvaluationSettings, bool]:
+    """
+    Parses settings related to running the model.
+    """
+
     settings_dict = settings_dict.copy()
+
     if run_type == "train":
         if "train" in settings_dict.keys():
             train_settings = parse_training_settings(settings_dict["train"])
@@ -66,6 +95,7 @@ def parse_run_settings(settings_dict: dict, run_type: str):
         if "do_train" in settings_dict.keys():
             do_train = settings_dict["do_train"]
         return train_settings, do_train
+
     if run_type == "eval":
         if "eval" in settings_dict.keys():
             eval_settings = parse_evaluation_settings(settings_dict["eval"])
@@ -73,6 +103,7 @@ def parse_run_settings(settings_dict: dict, run_type: str):
         if "do_eval" in settings_dict.keys():
             do_train = settings_dict["do_eval"]
         return eval_settings, do_eval
+
     raise ValueError(f"Invalid run type: '{run_type}'.")
 
 
@@ -82,6 +113,7 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     Valid settings include those in the default
     settings class:
 
+        name: str = "MLP"
         input_dim: int = 1
         output_dim: int = 1
         hidden_dims: int | list[int] = 32
@@ -100,12 +132,12 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
 
     # input_dim
     if settings_dict.get("input_dim") is not None:
-        check_network_dims(settings_dict["input_dim"], "input_dim")
+        check_pos_int(settings_dict["input_dim"], "input_dim")
         settings.input_dim = settings_dict["input_dim"]
     
     # output_dim
     if settings_dict.get("output_dim") is not None:
-        check_network_dims(settings_dict["output_dim"], "output_dim")
+        check_pos_int(settings_dict["output_dim"], "output_dim")
         settings.output_dim = settings_dict["output_dim"]
     
     # hidden_dims
@@ -113,7 +145,7 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
         if isinstance(settings_dict["hidden_dims"], int):
            settings_dict["hidden_dims"] = [settings_dict["hidden_dims"]]
         for hidden_dim in settings_dict["hidden_dims"]:
-            check_network_dims(hidden_dim, "hidden_dims")
+            check_pos_int(hidden_dim, "hidden_dims")
         settings.hidden_dims = settings_dict["hidden_dims"]
         num_hidden = len(settings.hidden_dims)
 
@@ -167,11 +199,12 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
 
     settings_dict = settings_dict.copy()
 
-    # Get default settings
+    # Get default settings (provide only required argument(s))
     settings = TrainingSettings(settings_dict["sampling"])
 
     # iterations
     if settings_dict.get("iterations") is not None:
+        check_pos_int(settings_dict["iterations"], "iterations", strict=False)
         settings.iterations = settings_dict["iterations"]
     
     # optimizer
@@ -180,22 +213,33 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     
     # update_scheme
     if settings_dict.get("update_scheme") is not None:
-        settings.optimizer = settings_dict["update_scheme"]
+        settings.update_scheme = settings_dict["update_scheme"].lower()
+    
+    # update_kwargs
+    if settings_dict.get("update_kwargs") is not None:
+        if settings.update_scheme == "softadapt":
+            settings.update_kwargs = settings2dict(SoftAdaptSettings(**settings_dict["update_kwargs"]))
+        else:
+            settings.update_kwargs = settings_dict["update_kwargs"]
     
     # learning_rate
     if settings_dict.get("learning_rate") is not None:
+        check_pos(settings_dict["learning_rate"], "learning_rate")
         settings.learning_rate = settings_dict["learning_rate"]
     
     # batch_size
     if settings_dict.get("batch_size") is not None:
+        check_pos_int(settings_dict["batch_size"], "batch_size")
         settings.batch_size = settings_dict["batch_size"]
     
     # decay_rate
     if settings_dict.get("decay_rate") is not None:
+        check_pos(settings_dict["decay_rate"], "decay_rate")
         settings.decay_rate = settings_dict["decay_rate"]
 
     # decay_steps
     if settings_dict.get("decay_steps") is not None:
+        check_pos_int(settings_dict["decay_steps"], "decay_steps")
         settings.decay_steps = settings_dict["decay_steps"]
     
     # transfer_learning
@@ -209,16 +253,6 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     # jitted_update
     if settings_dict.get("jitted_update") is not None:
         settings.jitted_update = settings_dict["jitted_update"]
-
-    # # Load settings from dictionary into settings class
-    # for key, value in settings_dict.items():
-    #     if hasattr(settings, key):
-    #         setattr(settings, key, value)
-    #     else:
-    #         raise SettingsInterpretationError(
-    #             f"Error: '{key}' is not a valid setting.")
-    
-    # settings.optimizer = convert_optimizer(settings.optimizer)
     
     return settings
 
@@ -231,7 +265,7 @@ def parse_evaluation_settings(settings_dict: dict) -> EvaluationSettings:
     
     settings_dict = settings_dict.copy()
 
-    # Get default settings
+    # Get default settings (provide only required argument(s))
     settings = EvaluationSettings(settings_dict["sampling"])
 
     # error_metric
@@ -245,7 +279,10 @@ def parse_evaluation_settings(settings_dict: dict) -> EvaluationSettings:
     return settings
 
 
-def parse_directory_settings(settings_dict: dict, id: str) -> DirectorySettings:
+def parse_directory_settings(settings_dict: dict,
+                             id: str,
+                             log_str: str | None = None
+                             ) -> DirectorySettings:
     """
     Parses settings related to file directories.
 
@@ -255,30 +292,40 @@ def parse_directory_settings(settings_dict: dict, id: str) -> DirectorySettings:
     Returns a DirectorySettings object.
     """
 
+    if log_str is None:
+        # Files to remove in log_dir
+        log_str = "*tfevents*"
+
+    # Directory class
     dir = DirectorySettings(**jtu.tree_map(
         lambda path_str: pathlib.Path(path_str), settings_dict)
         )
 
+    # Directory for storing figures
     if dir.figure_dir is None:
         setattr(dir, "figure_dir", dir.base_dir / "figures")
     dir.figure_dir = dir.figure_dir / id
+    dir.figure_dir.mkdir(parents=True, exist_ok=True)
 
+    # Directory for storing models
     if dir.model_dir is None:
         setattr(dir, "model_dir", dir.base_dir / "models")
     dir.model_dir = dir.model_dir / id
-
+    dir.model_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Directory for storing images
     if dir.image_dir is None:
         setattr(dir, "image_dir", dir.base_dir / "images")
     dir.image_dir = dir.image_dir / id
+    dir.image_dir.mkdir(parents=True, exist_ok=True)
 
+    # Directory for storing log files (e.g. Tensorboard files or text-based log files)
     if dir.log_dir is None:
         setattr(dir, "log_dir", dir.base_dir / "logs")
     dir.log_dir = dir.log_dir / id
+    shutil.rmtree(dir.log_dir / log_str, ignore_errors=True) # Remove current log_dir if it exists
+    dir.log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create directories if needed
-    for d in dir.__dict__.values():
-        d.mkdir(parents=True, exist_ok=True)
-    
     return dir
 
 
@@ -350,9 +397,34 @@ def convert_sampling_distribution(dist_str: str) -> Callable:
     return dist_fun
 
 
-def check_network_dims(option, name) -> None:
+def check_pos_int(option, name, strict = True) -> None:
+    """
+    Ensures input is integer and positive.
+    """
+    check_int(option, name)
+    check_pos(option, name, strict=strict)
+    return
+
+
+def check_int(option, name):
+    """
+    Ensures input is integer.
+    """
+
     if not isinstance(option, int):
         raise SettingsInterpretationError(f"Option '{name}' must be an integer.")
-    if not option >= 1:
+    return
+
+
+def check_pos(option, name, strict = True):
+    """
+    Ensures input is positive.
+    """
+
+    satisfied = (option >= 0)
+    if strict:
+        satisfied = (option > 0)
+
+    if not satisfied > 0:
         raise SettingsInterpretationError(f"Option '{name}' must be positive.")
     return

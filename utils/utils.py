@@ -49,19 +49,6 @@ def normal_eq(x: jax.Array, y: jax.Array, base: list[Callable], ridge: float | N
     return jnp.linalg.solve(XT_X+ridge*jnp.identity(len(base)), XT_y).ravel()
 
 
-def pretty_json(hp):
-  json_hp = json.dumps(hp, indent=2)
-  return "".join("\t" + line for line in json_hp.splitlines(True))
-
-
-def log_settings(settings):
-    os.system("rm -rf " + settings["io"]["log_dir"]+"/"+settings["id"]+"/*")
-    writer = SummaryWriter(log_dir=settings["io"]["log_dir"]+"/"+settings["id"])
-    writer.add_text("settings.json", pretty_json(settings))
-    writer.close()
-    return
-
-
 def timer(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
