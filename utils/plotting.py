@@ -64,9 +64,14 @@ def get_plot_variables(xlim, ylim, grid = 201):
 
 
 def log_plot(X, Y, Z, name, log_dir, step=None, vmin=None, vmax=None, logscale=False):
-    fig = plt.figure(figsize=(10,10), dpi=50)
+    fig = plt.figure(figsize=(10,10), dpi=75)
     p = plt.contourf(X, Y, Z, vmin=vmin, vmax=vmax, levels=_CLEVELS)
     plt.colorbar(p, ax=plt.gca())
+    log_figure(fig=plt.gcf(), name=name, log_dir=log_dir, step=step)
+    plt.close()
+    return
+
+def log_figure(fig, name, log_dir, step=None):
     fig.canvas.draw()
     
     data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
@@ -75,4 +80,4 @@ def log_plot(X, Y, Z, name, log_dir, step=None, vmin=None, vmax=None, logscale=F
     im = data2.transpose((2, 0, 1))
     
     log_img(log_dir, name, im, step=step)
-    plt.close()
+    return

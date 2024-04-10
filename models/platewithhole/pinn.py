@@ -2,29 +2,22 @@ from collections.abc import Callable
 from typing import override
 
 import jax
-import jax.numpy as jnp
-
 from . import analytic
-from . import plotting as pwhplot
 
 from datahandlers.generators import (
     generate_rectangle_with_hole,
     generate_collocation_points_with_hole,
-    resample
+    resample,
+    resample_idx
 )
 from models import PINN
-from models.networks import netmap
-from utils.plotting import get_plot_variables
+from . import analytic
+from . import plotting as pwhplot
 from utils.transforms import (
-    cart2polar_tensor,
-    xy2r,
-    rtheta2xy,
     vrtheta2xy,
     vxy2rtheta
 )
-
-_TENSION = 10
-_OUTER_RADIUS = 10
+from utils.utils import timer
 
 class PWHPINN(PINN):
     """
@@ -176,7 +169,7 @@ class PWHPINN(PINN):
         new_coll = generate_collocation_points_with_hole(resample_key, radius, xlim, ylim, resample_points)
         
         # Get true values of new collocation points
-        new_true = analytic.get_true_vals(self.train_points, exclude=["rect", "circ", "diri"])["coll"]
+        new_true = analytic.get_true_vals({"coll": new_coll}, exclude=["rect", "circ", "diri", "data"])["coll"]
         
         # Calculate values
         new_loss = loss_fun(self.params, new_coll, true_val=new_true)
@@ -184,64 +177,19 @@ class PWHPINN(PINN):
         # Choose subset of sampled points to keep
         new_coll = resample(new_coll, new_loss, sum(resample_num))
 
+        # Find indices to swap out new training points with
+        old_coll = self.train_points["coll"]
+        old_true = self.train_true_val["coll"]
+        old_loss = loss_fun(self.params, old_coll, true_val=old_true)
+        replace_idx = resample_idx(old_coll, old_loss, sum(resample_num))
+
         # Set new training points
-        self.train_points["coll"].at[:sum(resample_num)].set(new_coll)
-        self.train_points["coll"] = jax.random.permutation(perm_key, self.train_points["coll"])
-
+        self.train_points["coll"] = self.train_points["coll"].at[replace_idx].set(new_coll)
+        
         # Recalculate true values for collocation points
-        self.train_true_val["coll"] = analytic.get_true_vals(self.train_points, exclude=["rect", "circ", "diri"])["coll"]
+        self.train_true_val["coll"] = analytic.get_true_vals(self.train_points, exclude=["rect", "circ", "diri", "data"])["coll"]
         return
     
-    def get_plot_data(self):
-        radius = self.geometry_settings["domain"]["circle"]["radius"]
-        xlim = self.geometry_settings["domain"]["rectangle"]["xlim"]
-        ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
-
-        X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=101)
-        R, THETA, plotpoints_polar = get_plot_variables([radius, _OUTER_RADIUS], [0, 4*jnp.pi], grid=101)
-        plotpoints2 = jax.vmap(rtheta2xy)(plotpoints_polar)
-        
-        assert(jnp.allclose(plotpoints, vrtheta2xy(vxy2rtheta(plotpoints)), atol=1e-4))
-
-        # Hessian prediction
-        phi_pp = netmap(self.hessian)(self.params, plotpoints).reshape(-1, 4)
-        
-        # Calculate stress from phi function: phi_xx = sigma_yy, phi_yy = sigma_xx, phi_xy = -sigma_xy
-        sigma_cart = phi_pp[:, [3, 1, 2, 0]]
-        sigma_cart = sigma_cart.at[:, [1, 2]].set(-phi_pp[:, [1, 2]])
-
-        # List and reshape the four components
-        sigma_cart_list = [sigma_cart[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
-
-        # Repeat for the other set of points (polar coords converted to cartesian coords)
-        phi_pp2 = netmap(self.hessian)(self.params, plotpoints2).reshape(-1, 4)
-
-        # Calculate stress from phi function
-        sigma_cart2 = phi_pp2[:, [3, 1, 2, 0]]
-        sigma_cart2 = sigma_cart2.at[:, [1, 2]].set(-phi_pp2[:, [1, 2]])
-        
-        # Convert these points to polar coordinates before listing and reshaping
-        sigma_polar = jax.vmap(cart2polar_tensor, in_axes=(0, 0))(sigma_cart2.reshape(-1, 2, 2), plotpoints2).reshape(-1, 4)
-        sigma_polar_list = [sigma_polar[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
-
-        # Calculate true stresses (cartesian and polar)
-        sigma_cart_true = jax.vmap(analytic.cart_stress_true)(plotpoints)
-        sigma_cart_true_list = [sigma_cart_true.reshape(-1, 4)[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
-        sigma_polar_true = jax.vmap(analytic.polar_stress_true)(plotpoints_polar)
-        sigma_polar_true_list = [sigma_polar_true.reshape(-1, 4)[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
-
-        return X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list
-    
+    @timer
     def plot_results(self, save=True, log=False, step=None):
-        
-        X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = self.get_plot_data()
-        radius = self.geometry_settings["domain"]["circle"]["radius"]
-        
-        if save:
-            pwhplot.plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=self.dir.figure_dir, name="Cart_stress", radius=radius)
-            pwhplot.plot_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list, fig_dir=self.dir.figure_dir, name="Polar_stress")
-        if log:        
-            pwhplot.log_stress(X, Y, sigma_cart_list, sigma_cart_true_list, log_dir=self.dir.log_dir, name="Cart_stress")
-            pwhplot.log_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list, log_dir=self.dir.log_dir, name="Polar_stress")
-
-        return
+        pwhplot.plot_results(self.geometry_settings, self.hessian, self.params, self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step)

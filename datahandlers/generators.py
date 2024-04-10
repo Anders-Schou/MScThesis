@@ -1,5 +1,3 @@
-from functools import partial
-from dataclasses import dataclass
 from collections.abc import Sequence
 
 import numpy as np
@@ -178,7 +176,25 @@ def resample(new_arr: jax.Array, new_loss: jax.Array, num_keep: int):
     return new_arr[idx[-num_keep:]]
 
 
+def resample_idx(new_arr: jax.Array, new_loss: jax.Array, num_throwaway: int):
+    """
+    Utility function for finding the indices of the points with the lowest loss
 
+    input:
+        new_arr:
+            The array to choose points from.
+        
+        new_loss:
+            The losses to base the choice on.
+        
+        num_throwaway:
+            The number of sampled points to not keep.
+        
+    """
+
+    num_throwaway = min(num_throwaway, new_loss.ravel().shape[0])
+    idx = jnp.argpartition(new_loss.ravel(), kth=-num_throwaway)
+    return idx[:num_throwaway]
 
 
 
