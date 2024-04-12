@@ -13,6 +13,7 @@ from setup.settings import (
     VerbositySettings, 
     LoggingSettings,
     MLPSettings,
+    ResNetBlockSettings,
     TrainingSettings,
     EvaluationSettings,
     PlottingSettings,
@@ -58,17 +59,6 @@ def parse_verbosity_settings(settings_dict: dict | None = None):
 def parse_logging_settings(settings_dict: dict):
     return LoggingSettings(**settings_dict)
 
-# def parse_loss_type(loss_str: str) -> Callable:
-#     """
-#     Based on input string, this function returns a function
-#     for calculating the outer loss, e.g. a mean-squared error.
-#     """
-#     from models.loss import mse
-    
-#     loss_str = loss_str.lower()
-#     if loss_str == "mse":
-#         return mse
-#     raise ValueError(f"Loss of type '{loss_str}' is not supported.")
 
 def parse_plotting_settings(settings_dict: dict | None) -> PlottingSettings:
     """
@@ -130,6 +120,97 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     # Get default settings
     settings = MLPSettings()
 
+    # name
+    if settings_dict.get("name") is not None:
+        settings.name = str(settings_dict["name"])
+
+    # input_dim
+    if settings_dict.get("input_dim") is not None:
+        check_pos_int(settings_dict["input_dim"], "input_dim")
+        settings.input_dim = settings_dict["input_dim"]
+    
+    # output_dim
+    if settings_dict.get("output_dim") is not None:
+        check_pos_int(settings_dict["output_dim"], "output_dim")
+        settings.output_dim = settings_dict["output_dim"]
+    
+    # hidden_dims
+    if settings_dict.get("hidden_dims") is not None:
+        if isinstance(settings_dict["hidden_dims"], int):
+           settings_dict["hidden_dims"] = [settings_dict["hidden_dims"]]
+        for hidden_dim in settings_dict["hidden_dims"]:
+            check_pos_int(hidden_dim, "hidden_dims")
+        settings.hidden_dims = settings_dict["hidden_dims"]
+        num_hidden = len(settings.hidden_dims)
+
+    # activation
+    if settings_dict.get("activation") is not None:
+        if isinstance(settings_dict["activation"], list):
+            if len(settings_dict["activation"]) != num_hidden:
+                raise SettingsInterpretationError(
+                    "List of activation functions does not correspond to number of hidden layers.")
+            if not all([isinstance(act, str) for act in settings_dict["activation"]]):
+                raise SettingsInterpretationError(
+                    "List of activation functions must be strings.")
+            settings_dict["activation"] = [convert_activation(act) for act in settings_dict["activation"]]
+        elif isinstance(settings_dict["activation"], str):
+            settings_dict["activation"] = [convert_activation(settings_dict["activation"])] * num_hidden
+        else:
+            raise SettingsInterpretationError(
+                    "Wrong type for activation setting.")
+        settings.activation = settings_dict["activation"]
+    else:
+        settings.activation = [settings.activation] * num_hidden
+    
+    # initialization
+    if settings_dict.get("initialization") is not None:
+        if isinstance(settings_dict["initialization"], list):
+            if len(settings_dict["initialization"]) != num_hidden:
+                raise SettingsInterpretationError(
+                    "List of initialization functions does not correspond to number of hidden layers.")
+            if not all([isinstance(init, str) for init in settings_dict["initialization"]]):
+                raise SettingsInterpretationError(
+                    "List of initialization functions must be strings.")
+            settings_dict["initialization"] = [convert_initialization(init) for init in settings_dict["initialization"]]
+        elif isinstance(settings_dict["initialization"], str):
+            settings_dict["initialization"] = [convert_initialization(settings_dict["initialization"])] * (num_hidden+1)
+        else:
+            raise SettingsInterpretationError(
+                    "Wrong type for initialization setting.")
+        settings.initialization = settings_dict["initialization"]
+    else:
+        settings.initialization = [settings.initialization] * (num_hidden+1)
+
+    return settings2dict(settings)
+
+
+def parse_ResNetBlock_settings(settings_dict: dict) -> dict:
+    """
+    Parses settings specified in dictionary.
+    Valid settings include those in the default
+    settings class:
+
+        name: str = "MLP"
+        input_dim: int = 1
+        output_dim: int = 1
+        hidden_dims: int | list[int] = 32
+        activation: str | list[str] = "tanh"
+        initialization: str | list[str] = "glorot_normal"
+
+    Raises exception if a setting is unknown,
+    or if theres a mismatch in length of lists
+    of activations, initializations and number
+    of neurons in hidden layers.
+    """
+    settings_dict = settings_dict.copy()
+
+    # Get default settings
+    settings = ResNetBlockSettings()
+
+    # name
+    if settings_dict.get("name") is not None:
+        settings.name = str(settings_dict["name"])
+    
     # input_dim
     if settings_dict.get("input_dim") is not None:
         check_pos_int(settings_dict["input_dim"], "input_dim")
@@ -187,6 +268,29 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     else:
         settings.initialization = [settings.initialization] * (num_hidden+1)
     
+    # pre_act
+    if settings_dict.get("pre_act") is not None:
+        if isinstance(settings_dict["pre_act"], list):
+            settings_dict["pre_act"] = settings_dict["pre_act"][0]
+        if not isinstance(settings_dict["pre_act"], str):
+            raise SettingsInterpretationError("Cannot interpret pre-activation function. Input must be a string")
+        settings_dict["pre_act"] = convert_activation(settings_dict["pre_act"])
+    
+    # pre_act
+    if settings_dict.get("post_act") is not None:
+        if isinstance(settings_dict["post_act"], list):
+            settings_dict["post_act"] = settings_dict["post_act"][0]
+        if not isinstance(settings_dict["post_act"], str):
+            raise SettingsInterpretationError("Cannot interpret post-activation function. Input must be a string")
+        settings_dict["post_act"] = convert_activation(settings_dict["post_act"])
+
+    # shortcut_init
+    if settings_dict.get("shortcut_init") is not None:
+        if isinstance(settings_dict["shortcut_init"], list):
+            settings_dict["shortcut_init"] = settings_dict["shortcut_init"][0]
+        if not isinstance(settings_dict["shortcut_init"], str):
+            raise SettingsInterpretationError("Cannot interpret shortcut initialization function. Input must be a string")
+        settings_dict["shortcut_init"] = convert_initialization(settings_dict["shortcut_init"])
     return settings2dict(settings)
 
 

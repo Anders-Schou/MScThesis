@@ -127,6 +127,7 @@ class PlottingSettings(Settings):
     file_extension: str = "png"
     kwargs: dict | None = None
 
+
 @dataclass
 class SoftAdaptSettings(Settings):
     order: int = 1
@@ -145,6 +146,19 @@ class MLPSettings(Settings):
     hidden_dims: int | list[int] = 32
     activation: Callable | list[Callable] = SupportedActivations.tanh
     initialization: Callable | list[Callable] = nn.initializers.glorot_normal
+
+
+@dataclass
+class ResNetBlockSettings(Settings):
+    name: str = "ResNetBlock"
+    input_dim: int = 1
+    output_dim: int = 1
+    hidden_dims: int | list[int] = 32
+    activation: Callable | list[Callable] = SupportedActivations.tanh
+    initialization: Callable | list[Callable] = nn.initializers.glorot_normal
+    pre_act: Callable | None = None
+    post_act: Callable | None = SupportedActivations.tanh
+    shortcut_init: Callable | None = None
 
 
 def log_settings(settings_dict: dict,

@@ -67,11 +67,11 @@ def cart_stress_true(xy, **kwargs):
 
 
 def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | None],
+                  *,
                   exclude: Sequence[str] | None = None,
                   ylim = None,
                   noise: float | None = None,
-                  level: float = 0.05,
-                  seed: int = 0
+                  key = None
                   ) -> dict[str, jax.Array | dict[str, jax.Array] | None]:
     vals = {}
     if exclude is None:
@@ -93,13 +93,19 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
             vals["data"]["true_yy"] = true_data[:, 1, 1]
         else:
             # Noisy data
-            keys = jax.random.split(jax.random.PRNGKey(seed=seed), 3)
+            if key is None:
+                raise ValueError(f"PRNGKey must be specified.")
+            keys = jax.random.split(key, 3)
+
+            xx_noise = jax.random.normal(keys[0], true_data[:, 0, 0].shape)
             vals["data"]["true_xx"] = true_data[:, 0, 0] + \
-                level * jnp.linalg.norm(true_data[:, 0, 0]) * jax.random.normal(keys[0], true_data[:, 0, 0].shape)
+                noise * (jnp.linalg.norm(true_data[:, 0, 0]) / jnp.linalg.norm(xx_noise)) * xx_noise
+            xy_noise = jax.random.normal(keys[1], true_data[:, 0, 1].shape)
             vals["data"]["true_xy"] = true_data[:, 0, 1] + \
-                level * jnp.linalg.norm(true_data[:, 0, 1]) * jax.random.normal(keys[1], true_data[:, 0, 1].shape)
+                noise * (jnp.linalg.norm(true_data[:, 0, 1]) / jnp.linalg.norm(xy_noise)) * xy_noise
+            yy_noise = jax.random.normal(keys[2], true_data[:, 1, 1].shape)
             vals["data"]["true_yy"] = true_data[:, 1, 1] + \
-                level * jnp.linalg.norm(true_data[:, 1, 1]) * jax.random.normal(keys[2], true_data[:, 1, 1].shape)
+                noise * (jnp.linalg.norm(true_data[:, 1, 1]) / jnp.linalg.norm(yy_noise)) * yy_noise
     
     # Only inhomogeneous BCs at two sides of rectangle
     if "rect" not in exclude:
