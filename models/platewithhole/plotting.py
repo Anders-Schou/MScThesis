@@ -4,9 +4,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from utils.plotting import save_fig, plot_circle, log_plot
+from . import analytic
 from models.networks import netmap
-from utils.plotting import get_plot_variables
+from utils.plotting import (
+    save_fig,
+    plot_circle,
+    log_plot,
+    get_plot_variables
+)
 from utils.transforms import (
     cart2polar_tensor,
     xy2r,
@@ -14,7 +19,7 @@ from utils.transforms import (
     vrtheta2xy,
     vxy2rtheta
 )
-from . import analytic
+
 
 
 _DEFAULT_RADIUS = 2
@@ -24,13 +29,20 @@ _FONTSIZE = 40
 
 
 
-def plot_loss(loss_arr: jax.Array, loss_map: dict, *,
-              fig_dir,
-              name,
-              epoch_step = None,
-              extension="png",
-              figsize = (35, 30)):
-
+def plot_loss(
+    loss_arr: jax.Array,
+    loss_map: dict,
+    *,
+    fig_dir,
+    name,
+    epoch_step = None,
+    extension="png",
+    figsize = (35, 30)
+) -> None:
+    """
+    Plots losses from array in different subplots according to the specified dict.
+    """
+    
     num_plots = len(loss_map.keys())
     fig, ax = plt.subplots(num_plots, 1, figsize=figsize)
     plot_split = list(loss_map.keys())
@@ -48,61 +60,101 @@ def plot_loss(loss_arr: jax.Array, loss_map: dict, *,
             ax[i].tick_params(axis='x', labelsize=_FONTSIZE)
             ax[i].tick_params(axis='y', labelsize=_FONTSIZE)
         
-    save_fig(fig_dir, name, extension)
+    save_fig(fig_dir, name, extension, fig=fig)
     plt.clf()
     return
 
-def get_plot_data(geometry_settings, hessian, params):
-        radius = geometry_settings["domain"]["circle"]["radius"]
-        xlim = geometry_settings["domain"]["rectangle"]["xlim"]
-        ylim = geometry_settings["domain"]["rectangle"]["ylim"]
+def get_plot_data(geometry_settings, hessian, params, grid, mesh_data=None):
+        if mesh_data is not None:
+                radius = geometry_settings["domain"]["circle"]["radius"]
+                
+                X = mesh_data["X"]
+                Y = mesh_data["Y"]
+                R = mesh_data["R"]
+                THETA = mesh_data["THETA"]
+                plotpoints = mesh_data["plotpoints"]
+                plotpoints2 = mesh_data["plotpoints2"]
+                
+                sigma_cart_true_list = mesh_data["sigma_cart_true_list"]
+                sigma_polar_true_list = mesh_data["sigma_polar_true_list"]
+                
+                assert(jnp.allclose(plotpoints, vrtheta2xy(vxy2rtheta(plotpoints)), atol=1e-4))
 
-        X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=201)
-        R, THETA, plotpoints_polar = get_plot_variables([radius, max(xlim[1], ylim[1])], [0, 4*jnp.pi], grid=201)
-        plotpoints2 = jax.vmap(rtheta2xy)(plotpoints_polar)
+                # Hessian prediction
+                phi_pp = netmap(hessian)(params, plotpoints).reshape(-1, 4)
 
-        assert(jnp.allclose(plotpoints, vrtheta2xy(vxy2rtheta(plotpoints)), atol=1e-4))
+                # Calculate stress from phi function: phi_xx = sigma_yy, phi_yy = sigma_xx, phi_xy = -sigma_xy
+                sigma_cart = phi_pp[:, [3, 1, 2, 0]]
+                sigma_cart = sigma_cart.at[:, [1, 2]].set(-phi_pp[:, [1, 2]])
 
-        # Hessian prediction
-        phi_pp = netmap(hessian)(params, plotpoints).reshape(-1, 4)
+                # List and reshape the four components
+                sigma_cart_list = [sigma_cart[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
 
-        # Calculate stress from phi function: phi_xx = sigma_yy, phi_yy = sigma_xx, phi_xy = -sigma_xy
-        sigma_cart = phi_pp[:, [3, 1, 2, 0]]
-        sigma_cart = sigma_cart.at[:, [1, 2]].set(-phi_pp[:, [1, 2]])
+                # Repeat for the other set of points (polar coords converted to cartesian coords)
+                phi_pp2 = netmap(hessian)(params, plotpoints2).reshape(-1, 4)
 
-        # List and reshape the four components
-        sigma_cart_list = [sigma_cart[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
+                # Calculate stress from phi function
+                sigma_cart2 = phi_pp2[:, [3, 1, 2, 0]]
+                sigma_cart2 = sigma_cart2.at[:, [1, 2]].set(-phi_pp2[:, [1, 2]])
 
-        # Repeat for the other set of points (polar coords converted to cartesian coords)
-        phi_pp2 = netmap(hessian)(params, plotpoints2).reshape(-1, 4)
+                # Convert these points to polar coordinates before listing and reshaping
+                sigma_polar = jax.vmap(cart2polar_tensor, in_axes=(0, 0))(sigma_cart2.reshape(-1, 2, 2), plotpoints2).reshape(-1, 4)
+                sigma_polar_list = [sigma_polar[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
+                
+                return X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list
+        
+        else:
+                radius = geometry_settings["domain"]["circle"]["radius"]
+                xlim = geometry_settings["domain"]["rectangle"]["xlim"]
+                ylim = geometry_settings["domain"]["rectangle"]["ylim"]
 
-        # Calculate stress from phi function
-        sigma_cart2 = phi_pp2[:, [3, 1, 2, 0]]
-        sigma_cart2 = sigma_cart2.at[:, [1, 2]].set(-phi_pp2[:, [1, 2]])
+                X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=grid)
+                R, THETA, plotpoints_polar = get_plot_variables([radius, max(xlim[1], ylim[1])], [0, 4*np.pi], grid=grid)
+                plotpoints2 = jax.vmap(rtheta2xy)(plotpoints_polar)
 
-        # Convert these points to polar coordinates before listing and reshaping
-        sigma_polar = jax.vmap(cart2polar_tensor, in_axes=(0, 0))(sigma_cart2.reshape(-1, 2, 2), plotpoints2).reshape(-1, 4)
-        sigma_polar_list = [sigma_polar[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
+                assert(jnp.allclose(plotpoints, vrtheta2xy(vxy2rtheta(plotpoints)), atol=1e-4))
 
-        # Calculate true stresses (cartesian and polar)
-        sigma_cart_true = jax.vmap(analytic.cart_stress_true)(plotpoints)
-        sigma_cart_true_list = [sigma_cart_true.reshape(-1, 4)[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
-        sigma_polar_true = jax.vmap(analytic.polar_stress_true)(plotpoints_polar)
-        sigma_polar_true_list = [sigma_polar_true.reshape(-1, 4)[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
+                # Hessian prediction
+                phi_pp = netmap(hessian)(params, plotpoints).reshape(-1, 4)
 
-        return X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list
+                # Calculate stress from phi function: phi_xx = sigma_yy, phi_yy = sigma_xx, phi_xy = -sigma_xy
+                sigma_cart = phi_pp[:, [3, 1, 2, 0]]
+                sigma_cart = sigma_cart.at[:, [1, 2]].set(-phi_pp[:, [1, 2]])
 
-def plot_results(geometry_settings, hessian, params, fig_dir, log_dir, save=True, log=False, step=None):
+                # List and reshape the four components
+                sigma_cart_list = [sigma_cart[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
 
-        X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = get_plot_data(geometry_settings, hessian, params)
+                # Repeat for the other set of points (polar coords converted to cartesian coords)
+                phi_pp2 = netmap(hessian)(params, plotpoints2).reshape(-1, 4)
+
+                # Calculate stress from phi function
+                sigma_cart2 = phi_pp2[:, [3, 1, 2, 0]]
+                sigma_cart2 = sigma_cart2.at[:, [1, 2]].set(-phi_pp2[:, [1, 2]])
+
+                # Convert these points to polar coordinates before listing and reshaping
+                sigma_polar = jax.vmap(cart2polar_tensor, in_axes=(0, 0))(sigma_cart2.reshape(-1, 2, 2), plotpoints2).reshape(-1, 4)
+                sigma_polar_list = [sigma_polar[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
+
+                # Calculate true stresses (cartesian and polar)
+                sigma_cart_true = jax.vmap(analytic.cart_stress_true)(plotpoints)
+                sigma_cart_true_list = [sigma_cart_true.reshape(-1, 4)[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
+                sigma_polar_true = jax.vmap(analytic.polar_stress_true)(plotpoints_polar)
+                sigma_polar_true_list = [sigma_polar_true.reshape(-1, 4)[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
+
+                return X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list, plotpoints, plotpoints2
+
+
+def plot_results(geometry_settings, hessian, params, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, mesh_data=None):
+
+        X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = get_plot_data(geometry_settings, hessian, params, grid=grid, mesh_data=mesh_data)
         radius = geometry_settings["domain"]["circle"]["radius"]
 
         if save:
                 plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=fig_dir, name="Cart_stress", radius=radius)
                 plot_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list, fig_dir=fig_dir, name="Polar_stress")
         if log:        
-                log_stress(X, Y, sigma_cart_list, sigma_cart_true_list, log_dir=log_dir, name="Cart_stress", varnames="RT", step=step)
-                log_stress(R, THETA, sigma_polar_list, sigma_polar_true_list, log_dir=log_dir, name="Polar_stress", varnames="RT", step=step)
+                log_stress(X, Y, sigma_cart_list, sigma_cart_true_list, log_dir=log_dir, name="Cart_stress", varnames="XY", step=step, dpi=dpi)
+                log_stress(R, THETA, sigma_polar_list, sigma_polar_true_list, log_dir=log_dir, name="Polar_stress", varnames="RT", step=step, dpi=dpi)
 
         return
 
@@ -273,43 +325,42 @@ def plot_polar_stress(X, Y, Z, Z_true, *, fig_dir, name,
     return
 
 
-def log_stress(X, Y, Z, Z_true, *, log_dir, name, step=None, varnames="XY"):
+def log_stress(X, Y, Z, Z_true, *, log_dir, name, step=None, varnames="XY", dpi=50):
         
         # Log plots
-        if step is not None:
-                log_plot(X, Y, Z[0], name=name+"/Surrogate/"+varnames[0]+varnames[0], log_dir=log_dir, step=step,
-                        vmin=min(jnp.min(Z_true[0]),jnp.min(Z[0])), 
-                        vmax=max(jnp.max(Z_true[0]),jnp.max(Z[0])))
+        log_plot(X, Y, Z[0], name=name+"/Surrogate/"+varnames[0]+varnames[0], log_dir=log_dir, step=step,
+                vmin=min(jnp.min(Z_true[0]),jnp.min(Z[0])), 
+                vmax=max(jnp.max(Z_true[0]),jnp.max(Z[0])), dpi=dpi)
+        
+        log_plot(X, Y, Z[1], name=name+"/Surrogate/"+varnames[0]+varnames[1], log_dir=log_dir, step=step,
+                vmin=min(jnp.min(Z_true[1]),jnp.min(Z[1])), 
+                vmax=max(jnp.max(Z_true[1]),jnp.max(Z[1])), dpi=dpi)
                 
-                log_plot(X, Y, Z[1], name=name+"/Surrogate/"+varnames[0]+varnames[1], log_dir=log_dir, step=step,
-                        vmin=min(jnp.min(Z_true[1]),jnp.min(Z[1])), 
-                        vmax=max(jnp.max(Z_true[1]),jnp.max(Z[1])))
-                        
-                log_plot(X, Y, Z[3], name=name+"/Surrogate/"+varnames[1]+varnames[1], log_dir=log_dir, step=step,
-                        vmin=min(jnp.min(Z_true[3]),jnp.min(Z[3])), 
-                        vmax=max(jnp.max(Z_true[3]),jnp.max(Z[3])))
-                
-                
-                log_plot(X, Y, jnp.abs(Z_true[0] - Z[0]), name=name+"/Error/"+varnames[0]+varnames[0], log_dir=log_dir, step=step, logscale=True)
-                
-                log_plot(X, Y, jnp.abs(Z_true[1] - Z[1]), name=name+"/Error/"+varnames[0]+varnames[1], log_dir=log_dir, step=step, logscale=True)
+        log_plot(X, Y, Z[3], name=name+"/Surrogate/"+varnames[1]+varnames[1], log_dir=log_dir, step=step,
+                vmin=min(jnp.min(Z_true[3]),jnp.min(Z[3])), 
+                vmax=max(jnp.max(Z_true[3]),jnp.max(Z[3])), dpi=dpi)
+        
+        
+        log_plot(X, Y, jnp.abs(Z_true[0] - Z[0]), name=name+"/Error/"+varnames[0]+varnames[0], log_dir=log_dir, step=step, logscale=True, dpi=dpi)
+        
+        log_plot(X, Y, jnp.abs(Z_true[1] - Z[1]), name=name+"/Error/"+varnames[0]+varnames[1], log_dir=log_dir, step=step, logscale=True, dpi=dpi)
 
-                log_plot(X, Y, jnp.abs(Z_true[3] - Z[3]), name=name+"/Error/"+varnames[1]+varnames[1], log_dir=log_dir, step=step, logscale=True)
+        log_plot(X, Y, jnp.abs(Z_true[3] - Z[3]), name=name+"/Error/"+varnames[1]+varnames[1], log_dir=log_dir, step=step, logscale=True, dpi=dpi)
                 
         
         # These are redundant after first time being logged
-        if step is None:
+        if step == 0:
             log_plot(X, Y, Z_true[0], name=name+"/True/"+varnames[0]+varnames[0], log_dir=log_dir, step=step,
                     vmin=min(jnp.min(Z_true[0]),jnp.min(Z[0])), 
-                    vmax=max(jnp.max(Z_true[0]),jnp.max(Z[0])))
+                    vmax=max(jnp.max(Z_true[0]),jnp.max(Z[0])), dpi=dpi)
             
             log_plot(X, Y, Z_true[1], name=name+"/True/ "+varnames[0]+varnames[1], log_dir=log_dir, step=step,
                     vmin=min(jnp.min(Z_true[1]),jnp.min(Z[1])), 
-                    vmax=max(jnp.max(Z_true[1]),jnp.max(Z[1])))
+                    vmax=max(jnp.max(Z_true[1]),jnp.max(Z[1])), dpi=dpi)
                     
             log_plot(X, Y, Z_true[3], name=name+"/True/"+varnames[1]+varnames[1], log_dir=log_dir, step=step,
                     vmin=min(jnp.min(Z_true[3]),jnp.min(Z[3])), 
-                    vmax=max(jnp.max(Z_true[3]),jnp.max(Z[3])))
+                    vmax=max(jnp.max(Z_true[3]),jnp.max(Z[3])), dpi=dpi)
             
             
             

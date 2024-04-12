@@ -94,6 +94,9 @@ class Model(metaclass=ABCMeta):
         
         self.sample_plots = parse_plotting_settings(plot_settings.get("sampling"))
         self.result_plots = parse_plotting_settings(plot_settings.get("results"))
+        plot_settings.pop("sampling")
+        plot_settings.pop("results")
+        self.plot_settings = plot_settings
         return
     
     def _parse_logging_settings(self, log_settings: dict) -> None:

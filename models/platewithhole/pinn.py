@@ -192,4 +192,13 @@ class PWHPINN(PINN):
     
     @timer
     def plot_results(self, save=True, log=False, step=None):
-        pwhplot.plot_results(self.geometry_settings, self.hessian, self.params, self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step)
+        if not hasattr(self, 'mesh_data'):
+            values = pwhplot.get_plot_data(self.geometry_settings, 
+                                           self.hessian, self.params, 
+                                           grid=self.plot_settings["grid"])
+            keys = ["X", "Y", "R", "THETA", "sigma_cart_list", "sigma_cart_true_list", "sigma_polar_list", "sigma_polar_true_list", "plotpoints", "plotpoints2"]
+            self.mesh_data = {key: val for key, val in zip(keys, values)}
+            
+        pwhplot.plot_results(self.geometry_settings, self.jitted_hessian, self.params, 
+                             self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step, 
+                             grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"], mesh_data=self.mesh_data)

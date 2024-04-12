@@ -97,15 +97,10 @@ class PINN(Model):
         return self.forward(self.params, *args, **kwargs)
 
     def log_scalars(self,
-                params,
-                inputs: dict[str, jax.Array],
-                true_val: dict[str, jax.Array],
-                update_key: int | None = None,
+                losses,
                 step: int | None = None):
-        losses = self._loss_terms(params, inputs, true_val, update_key)
         writer = SummaryWriter(log_dir=self.dir.log_dir)
-        
-        writer.add_scalars('Losses' , {self.loss_names[i]: np.array(losses[i]) for i in range(len(losses))}, global_step=step)
+        writer.add_scalars('Losses/' , {self.loss_names[i]: np.array(losses[i]) for i in range(len(losses))}, global_step=step)
                 
         writer.close()
         
@@ -114,7 +109,7 @@ class PINN(Model):
     @timer
     def plot_training_points(self, save=True, log=False, step=None):
         plt.figure()
-        _ = jtu.tree_map_with_path(lambda x, y: plt.scatter(np.array(y)[:,0], np.array(y)[:,1], **self.plot_kwargs[x[0].key]), OrderedDict(self.train_points))
+        _ = jtu.tree_map_with_path(lambda x, y: plt.scatter(np.array(y)[:,0], np.array(y)[:,1], **self.sample_plots.kwargs[x[0].key]), OrderedDict(self.train_points))
         
         if save:
             save_fig(self.dir.figure_dir, "training_points.png", "png", plt.gcf())

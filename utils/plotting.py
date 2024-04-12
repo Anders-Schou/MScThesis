@@ -17,7 +17,7 @@ def save_fig(dir: str, file_name: str, format: str = "png",
         fig = plt.gcf()
     fig.savefig(os.path.join(dir, file_name), format=format, bbox_inches="tight")
     if clear:
-        plt.clf()
+        fig.clf()
     if close:
         plt.close(fig)
     return
@@ -63,8 +63,8 @@ def get_plot_variables(xlim, ylim, grid = 201):
     return X, Y, plotpoints
 
 
-def log_plot(X, Y, Z, name, log_dir, step=None, vmin=None, vmax=None, logscale=False):
-    fig = plt.figure(figsize=(10,10), dpi=75)
+def log_plot(X, Y, Z, name, log_dir, step=None, vmin=None, vmax=None, logscale=False, dpi=50):
+    fig = plt.figure(figsize=(10,10), dpi=dpi)
     p = plt.contourf(X, Y, Z, vmin=vmin, vmax=vmax, levels=_CLEVELS)
     plt.colorbar(p, ax=plt.gca())
     log_figure(fig=plt.gcf(), name=name, log_dir=log_dir, step=step)
