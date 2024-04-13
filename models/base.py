@@ -67,6 +67,10 @@ class Model(metaclass=ABCMeta):
         
         if self.logging.do_logging:
             log_settings(settings, self.dir.log_dir, tensorboard=True, text_file=False)
+        
+        if settings.get("description"):
+            with open(self.dir.log_dir / "description.txt", "a+") as file:
+                file.writelines([settings["description"], "\n\n"])
 
         return
 
