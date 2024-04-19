@@ -175,7 +175,7 @@ class ResNetBlock(nn.Module):
         return s
 
 
-def netmap(model: Callable, **kwargs) -> Callable:
+def netmap(model: Callable[..., jax.Array], **kwargs) -> Callable[..., jax.Array]:
     """
     Applies the jax.vmap function with in_axes=(None, 0).
     """

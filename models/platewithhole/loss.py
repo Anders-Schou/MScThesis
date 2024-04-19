@@ -43,17 +43,35 @@ def loss_rect(*output: jax.Array, true_val: dict[str, jax.Array] | None = None):
            mse(out3[:, 3], true_val.get("yy3")), mse(out3[:, 2], true_val.get("xy3"))
 
 
+def loss_rect_extra(*output: jax.Array, true_val: dict[str, jax.Array] | None = None):
+
+    # Unpack outputs
+    out0, out1, out2, out3 = output
+
+    # Return all losses
+    if true_val is None:
+        return mse(out0[:, 3]), mse(out1[:, 0]), \
+               mse(out2[:, 3]), mse(out3[:, 0])
+    return mse(out0[:, 0], true_val.get("yy0")), mse(out1[:, 1], true_val.get("xx1")), \
+           mse(out2[:, 3], true_val.get("yy2")), mse(out3[:, 2], true_val.get("xx3"))
+
+
 def loss_circ_rr_rt(input: jax.Array, output: jax.Array, true_val: dict[str, jax.Array] | None = None):
 
     # Get polar angle
     theta = xy2theta(input[:, 1], input[:, 0])
     
+    ct = jnp.cos(theta)
+    st = jnp.sin(theta)
+    ct2 = jnp.square(ct)
+    st2 = jnp.square(st)
+
     # Compute polar stresses (sigma_rr, sigma_rt)
-    srr = jnp.multiply(output[:, 3], jnp.square(jnp.cos(theta))) + \
-          jnp.multiply(output[:, 0], jnp.square(jnp.sin(theta))) - \
-          2*jnp.multiply(output[:, 1], jnp.sin(theta)*jnp.cos(theta))
-    srt = jnp.multiply(jnp.subtract(output[:, 0], output[:, 3]), jnp.sin(theta)*jnp.cos(theta)) - \
-          jnp.multiply(output[:, 1], jnp.square(jnp.cos(theta))-jnp.square(jnp.sin(theta)))
+    srr = jnp.multiply(output[:, 3], ct2) + \
+          jnp.multiply(output[:, 0], st2) - \
+          2*jnp.multiply(output[:, 1], st*ct)
+    srt = jnp.multiply(jnp.subtract(output[:, 0], output[:, 3]), st*ct) - \
+          jnp.multiply(output[:, 1], ct2-st2)
     
     # Return both losses
     if true_val is None:

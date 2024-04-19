@@ -1,10 +1,19 @@
 from abc import ABCMeta, abstractmethod
+from collections.abc import Callable
 import inspect
 
 import jax
 import jax.numpy as jnp
+import optax
 
-from setup.settings import log_settings
+from setup.settings import (
+    ModelNotInitializedError,
+    log_settings,
+    DefaultSettings,
+    SoftAdaptSettings,
+    WeightedSettings,
+    UnweightedSettings
+)
 from setup.parsers import (
     parse_verbosity_settings,
     parse_logging_settings,
@@ -13,11 +22,7 @@ from setup.parsers import (
     parse_run_settings
 )
 from .optim import get_update
-from .softadapt import softadapt
-
-
-_DEFAULT_SEED: int = 0
-_DEFAULT_ID: str = "generic_id"
+from .loss import softadapt, weighted, unweighted
 
 
 class Model(metaclass=ABCMeta):
@@ -27,6 +32,11 @@ class Model(metaclass=ABCMeta):
     The main functionality on this level is to parse the settings specified in the JSON file.
     Additionally, abstract methods are defined.
     """
+    params: optax.Params
+    train_points: dict
+    train_true_val: dict | None
+    eval_points: dict
+    eval_true_val: dict | None
 
     def __init__(self, settings: dict, *args, **kwargs):
         """
@@ -46,13 +56,13 @@ class Model(metaclass=ABCMeta):
         self._seed = settings.get("seed")
         if self._seed is None:
             if self._verbose.init:
-                print(f"No seed specified in settings. Seed is set to {_DEFAULT_SEED}.")
-            self._seed = _DEFAULT_SEED
+                print(f"No seed specified in settings. Seed is set to {DefaultSettings.SEED}.")
+            self._seed = DefaultSettings.SEED
         self._id = settings.get("id")
         if self._id is None:
             if self._verbose.init:
-                print(f"No ID specified in settings. ID is set to '{_DEFAULT_ID}'.")
-            self._id = _DEFAULT_ID
+                print(f"No ID specified in settings. ID is set to '{DefaultSettings.ID}'.")
+            self._id = DefaultSettings.ID
         
         # Set a key for use in other methods
         # Important: Remember to return a new _key as well, e.g.:
@@ -164,12 +174,52 @@ class Model(metaclass=ABCMeta):
         
         # Check if SoftAdapt should be used
         if self.train_settings.update_scheme == "softadapt":
-            fun = softadapt(**self.train_settings.update_kwargs)(fun)
-        
-        # Set loss term function
-        self._loss_terms = fun
-        return
+            self._loss_terms = softadapt(SoftAdaptSettings(
+                **self.train_settings.update_kwargs["softadapt"]))(fun)
+        elif self.train_settings.update_scheme == "weighted":
+            self._loss_terms = weighted(WeightedSettings(
+                **self.train_settings.update_kwargs["weighted"]))(fun)
+        else:
+            self._loss_terms = unweighted(UnweightedSettings(
+                **self.train_settings.update_kwargs["unweighted"]))(fun)
 
+        return
+    
+    def _init_prevlosses(self,
+                         loss_term_fun: Callable[..., jax.Array],
+                         update_key: int | None = None,
+                         prevlosses: jax.Array | None = None
+                         ) -> None:
+        """
+        Method for initializing array of previous losses.
+        If prevlosses is None, the method sets prevlosses
+        to an array determined by the loss type.
+        """
+        
+        if not self._initialized():
+            raise ModelNotInitializedError("The model has not been initialized properly.")
+        
+        # Calculate initial loss
+        init_loss = loss_term_fun(self.params, self.train_points, 
+                                  true_val=self.train_true_val, update_key=update_key)
+        
+        # Check which loss to use
+        if self.train_settings.update_scheme == "softadapt":
+            numrows = self.train_settings.update_kwargs["softadapt"]["order"] + 1
+            if prevlosses is None or prevlosses.shape[0] < numrows:
+                self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, init_loss.shape[0])) \
+                    * jnp.linspace(numrows, 1, numrows).reshape(-1, 1) # Fake decreasing loss
+            else:
+                # Use 'numrows' last losses
+                self.prevlosses = prevlosses[-(numrows):, :]
+        elif self.train_settings.update_scheme == "weighted":
+            numrows = self.train_settings.update_kwargs["weighted"]["save_last"]
+            self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, init_loss.shape[0]))
+        else:
+            numrows = self.train_settings.update_kwargs["unweighted"]["save_last"]
+            self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, init_loss.shape[0]))
+        return
+    
     def _set_update(self,
                     loss_fun_name: str = "_total_loss",
                     optimizer_name: str = "optimizer"
@@ -191,9 +241,17 @@ class Model(metaclass=ABCMeta):
         
         self.update = get_update(loss_fun,
                                  optimizer,
-                                 self.train_settings.update_scheme,
-                                 self.train_settings.jitted_update)
+                                 self.train_settings.jitted_update,
+                                 verbose=True,
+                                 verbose_kwargs={"print_every": self.logging.print_every})
         return
+    
+    def _initialized(self) -> bool:
+        has_params = hasattr(self, "params")
+        has_train_points = hasattr(self, "train_points")
+        has_eval_points = hasattr(self, "eval_points")
+        return has_params and has_train_points and has_eval_points
+
  
     @abstractmethod
     def train(self):
@@ -223,7 +281,7 @@ class Model(metaclass=ABCMeta):
         """
         
         s = f"\n\nModel '{self.__class__.__name__}' with the following methods:\n\n\n\n"
-        # print(dir(self))
+        
         for m in dir(self):
             attr = getattr(self, m)
             if m.startswith("_") or not inspect.ismethod(attr):
@@ -241,9 +299,30 @@ class Model(metaclass=ABCMeta):
             if m.startswith("_") or inspect.ismethod(attr):
                 continue
             s += m
-            # s += ":\n"
-            # docstr = attr.__doc__
-            # s += docstr if docstr is not None else "\n\tNo documentation.\n"
             s += "\n\n"
 
         return s
+    
+
+    # def _update_unweighted(self,
+    #                        opt_state: optax.OptState,
+    #                        params: optax.Params,
+    #                        inputs: dict[str],
+    #                        true_val: dict[str] | None = None,
+    #                        update_key: int | None = None,
+    #                        prevlosses: jax.Array | None = None):
+    #     """
+        
+    #     """
+
+    #     # Compute loss and gradients
+    #     (total_loss, aux), grads = jax.value_and_grad(self._total_loss, has_aux=True)(
+    #         params, inputs, true_val=true_val, update_key=update_key, prevlosses=prevlosses)
+
+    #     # Apply updates
+    #     updates, opt_state = self.optimizer.update(grads, opt_state, params)
+    #     params = optax.apply_updates(params, updates)
+
+    #     # Return updated params and state as well as the losses
+    #     return params, opt_state, total_loss, *aux
+    

@@ -3,7 +3,7 @@ from collections.abc import Sequence
 import jax
 import jax.numpy as jnp
 
-from utils.transforms import xy2r, xy2theta, xy2rtheta, polar2cart_tensor
+from utils.transforms import xy2r, xy2theta, xy2rtheta, polar2cart_tensor, cart2polar_tensor
 
 _TENSION = 10
 
@@ -124,6 +124,10 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
                 "xy2": -true_rect[2][:, 0, 1],
                 "yy3":  true_rect[3][:, 0, 0],
                 "xy3": -true_rect[3][:, 1, 0],
+                "yy0":  true_rect[0][:, 0, 0], # extra
+                "xx1":  true_rect[1][:, 1, 1], # extra
+                "yy2":  true_rect[2][:, 0, 0], # extra
+                "xx3":  true_rect[3][:, 1, 1]  # extra
                 }
 
 

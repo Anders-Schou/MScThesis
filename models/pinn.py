@@ -59,7 +59,6 @@ class PINN(Model):
         super().__init__(settings, *args, **kwargs)
         
         self._parse_geometry_settings(settings["geometry"])
-        self.init_model(settings["model"]["pinn"]["network"])
         return
 
     @override
@@ -74,7 +73,7 @@ class PINN(Model):
         # Initialize network parameters
         self._key, *net_keys = jax.random.split(self._key, num_nets+1)
         params = [net.init(net_keys[i], jnp.ones((1, net.input_dim))) for i, net in enumerate(self.net)]
-        self.params = {net.name+str(i): params[i] for i, net in enumerate(self.net)}
+        self.params = {"net"+str(i): par for i, par in enumerate(params)}
 
         # Set optimizer if relevant
         if self.do_train:
@@ -97,10 +96,14 @@ class PINN(Model):
         return self.forward(self.params, *args, **kwargs)
 
     def log_scalars(self,
-                losses,
-                step: int | None = None):
+                    scalars,
+                    scalar_names,
+                    tag = 'Losses/',
+                    step: int | None = None):
         writer = SummaryWriter(log_dir=self.dir.log_dir)
-        writer.add_scalars('Losses/' , {self.loss_names[i]: np.array(losses[i]) for i in range(len(losses))}, global_step=step)
+        writer.add_scalars(tag,
+                           {name: np.array(loss) for name, loss in zip(scalar_names, scalars)},
+                           global_step=step)
                 
         writer.close()
         

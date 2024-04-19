@@ -1,0 +1,135 @@
+{
+    "id": "010",
+    "seed": 1234,
+
+    "io": {
+        "base_dir": "/zhome/e8/9/147091/MSc/experiments/11",
+        "figure_dir": "/zhome/e8/9/147091/MSc/experiments/11/figures",
+        "model_dir": "/zhome/e8/9/147091/MSc/experiments/11/models",
+        "image_dir": "/zhome/e8/9/147091/MSc/experiments/11/images",
+        "log_dir": "/zhome/e8/9/147091/MSc/experiments/11/logs"
+    },
+
+    "geometry": {
+        "domain": {
+            "rectangle": { "xlim": [-10.0, 10.0], "ylim": [-10.0, 10.0] },
+            "circle": { "center": [0.0, 0.0], "radius": 2.0 }
+        }
+    },
+
+    "run": {
+        "train": {
+            "sampling": {
+                "coll": [5000, 1000],
+                "rect": [1000, 1000, 1000, 1000],
+                "circ": 2000,
+                "data": [50, 50]
+            },
+            "iterations": 50000,
+            "optimizer": "adam",
+            "update_scheme": "weighted",
+            "update_kwargs": {
+                "softadapt": {
+                    "order": 4,
+                    "beta": 0.01,
+                    "loss_weighted": true,
+                    "normalized": true
+                },
+                "unweighted": {
+                    "normalized": true,
+                    "save_last": 5
+                },
+                "weighted": {
+                    "weights": [5, 5, 2]
+                }
+            },
+            "learning_rate": 5e-3,
+            "batch_size": null,
+            "decay_rate": 0.90,
+            "decay_steps": 2000,
+            "transfer_learning": false,
+            "resampling": {
+                "do_resampling": false,
+                "resample_steps": 5000,
+                "resample_num": [100, 100],
+                "loss_emphasis": 2,
+                "replace": true
+            },
+            "jitted_update": true
+        },
+        "eval": {
+            "error_metric": "L2-rel",
+            "transfer_learning": false,
+            "sampling": {
+                "coll": [200, 200],
+                "rect": [50, 50, 50, 50],
+                "circ": 100,
+                "data": [50, 10]
+            }
+        }
+    },
+
+    "model": {
+        "pinn": {
+            "network": [
+                {
+                    "architecture": "mlp",
+                    "specifications": {
+                        "input_dim": 2,
+                        "output_dim": 1,
+                        "hidden_dims": [128, 128],
+                        "activation": "silu",
+                        "initialization": "glorot_normal"
+                    }
+                },
+                {
+                    "architecture": "mlp",
+                    "specifications": {
+                        "input_dim": 2,
+                        "output_dim": 1,
+                        "hidden_dims": [128, 128],
+                        "activation": "silu",
+                        "initialization": "glorot_normal"
+                    }
+                }
+            ]
+        }
+    },
+
+    "plotting": {
+        "sampling": {
+            "do_plots": true,
+            "plot_every": null,
+            "overwrite": false,
+            "file_extension": "png",
+            "kwargs": {
+                "coll": {
+                    "color": "blue",
+                    "s": 5
+                },
+                "rect": {
+                    "color": "green",
+                    "s": 5
+                },
+                "circ": {
+                    "color": "red",
+                    "s": 5
+                }
+            }
+        },
+        "results": {
+            "do_plots": true,
+            "plot_every": null,
+            "overwrite": false,
+            "file_extension": "png"
+        },
+        "dpi": 75,
+        "grid": 201
+    },
+
+    "logging": {
+        "do_logging": true,
+        "log_every": 200,
+        "print_every": 100
+    }
+}

@@ -18,8 +18,32 @@ class SettingsNotSupportedError(Exception):
     pass
 
 
+class ModelNotInitializedError(RuntimeError):
+    pass
+
+
 class Settings:
     pass
+
+
+class DefaultSettings(Settings):
+    """
+    Contains default values for various settings
+    """
+
+    # General defaults for a model
+    SEED: int = 0
+    ID: str = "generic_id"
+
+    # Related to loss algorithms 
+    SOFTADAPT_ORDER: int = 1
+    SAVE_LAST_LOSSES: int = 5
+    SOFTMAX_TOLERANCE: float = 1e-8
+
+    # Related to verbosity
+    PRINT_EVERY: int = 1000
+    
+
 
 
 @dataclass
@@ -136,6 +160,19 @@ class SoftAdaptSettings(Settings):
     loss_weighted: bool = False
     delta_time: float | None = None
     shift_by_max_val: bool = True
+
+
+@dataclass
+class WeightedSettings(Settings):
+    weights: jax.Array
+    normalized: bool = False
+    save_last: int = 5
+
+
+@dataclass
+class UnweightedSettings(Settings):
+    normalized: bool = False
+    save_last: int = 5
 
 
 @dataclass

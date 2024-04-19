@@ -19,6 +19,8 @@ from setup.settings import (
     PlottingSettings,
     DirectorySettings,
     SoftAdaptSettings,
+    WeightedSettings,
+    UnweightedSettings,
     SupportedActivations,
     SupportedOptimizers,
     SupportedCustomOptimizerSchedules,
@@ -321,10 +323,32 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     
     # update_kwargs
     if settings_dict.get("update_kwargs") is not None:
+        settings.update_kwargs = {}
+
         if settings.update_scheme == "softadapt":
-            settings.update_kwargs = settings2dict(SoftAdaptSettings(**settings_dict["update_kwargs"]))
+            try:
+                settings.update_kwargs["softadapt"] = settings2dict(
+                    SoftAdaptSettings(**settings_dict["update_kwargs"]["softadapt"])
+                )
+            except KeyError:
+                settings.update_kwargs["softadapt"] = settings2dict(SoftAdaptSettings())
+        
+        elif settings.update_scheme == "weighted":
+            try:
+                settings.update_kwargs["weighted"] = settings2dict(
+                    WeightedSettings(**settings_dict["update_kwargs"]["weighted"])
+                )
+            except (KeyError, TypeError) as e:
+                raise KeyError("Using the weighted update requires a settings dict "
+                               "with the field 'weights'.") from e
+        
         else:
-            settings.update_kwargs = settings_dict["update_kwargs"]
+            try:
+                settings.update_kwargs["unweighted"] = settings2dict(
+                    UnweightedSettings(**settings_dict["update_kwargs"]["unweighted"])
+                )
+            except KeyError:
+                settings.update_kwargs["unweighted"] = settings2dict(UnweightedSettings())
     
     # learning_rate
     if settings_dict.get("learning_rate") is not None:
@@ -359,6 +383,7 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
         settings.jitted_update = settings_dict["jitted_update"]
     
     return settings
+
 
 def parse_evaluation_settings(settings_dict: dict) -> EvaluationSettings:
     """

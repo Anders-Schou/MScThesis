@@ -1,24 +1,36 @@
 from functools import wraps
+from collections.abc import Callable
 
 from scipy.special import gamma
 import jax
 import jax.numpy as jnp
 
+from setup.settings import DefaultSettings, SoftAdaptSettings
 
-_SOFTMAX_TOLERANCE = 1e-8
 
 
-def backwards_fdm_coeff(order: int) -> jax.Array:
-    lins = jnp.linspace(0, order, order+1).reshape(-1, 1)
+def get_fdm_coeff(order: int,
+                  backward: bool = True
+                  ) -> jax.Array:
+    """
+    Function for calculating finite difference coefficients.
+    """
+    if backward:
+        lins = jnp.linspace(-order, 0, order+1)
+    else:
+        lins = jnp.linspace(0, order, order+1)
     exponents = jnp.linspace(0, order, order+1)
-    powers = jnp.power(lins, exponents)
+    powers = jnp.power(lins.reshape(-1, 1), exponents)
     factorials = jnp.array([gamma(i+1) for i in range(order+1)])
-    RHS = jnp.zeros((order+1,)).at[1].set(1.)
-    M = jnp.divide(powers, factorials)
+    
+    # Set up linear system
+    RHS = jnp.zeros((order+1,)).at[1].set(1.) # Set position of 1st derivative to 1.
+    M = jnp.divide(powers, factorials) # Taylor expansion terms
     return jnp.linalg.solve(M.T, RHS)
 
 
-def softmax(input: jax.Array, beta: float = 0.1,
+def softmax(input: jax.Array,
+            beta: float = 0.1,
             numerator_weights: jax.Array | None = None,
             shift_by_max_value: bool = True
             ) -> jax.Array:
@@ -30,16 +42,10 @@ def softmax(input: jax.Array, beta: float = 0.1,
     if numerator_weights is not None:
         exp_of_input = jnp.multiply(numerator_weights, exp_of_input)
         
-    return exp_of_input / jnp.sum(exp_of_input + _SOFTMAX_TOLERANCE)
+    return exp_of_input / jnp.sum(exp_of_input + DefaultSettings.SOFTMAX_TOLERANCE)
 
 
-def softadapt(order: int = 6,
-              beta: float = 0.1,
-              normalized: bool = False,
-              loss_weighted: bool = False,
-              delta_time: float | None = None,
-              shift_by_max_val: bool = True
-              ):
+def softadapt(sett: SoftAdaptSettings) -> Callable[..., Callable]:
     """
     Function implementing the SoftAdapt algorithm.
     RETURNS a DECORATOR for the function calculating
@@ -53,16 +59,20 @@ def softadapt(order: int = 6,
 
     """
     
+    order = sett.order
+    beta = sett.beta
+    normalized = sett.normalized
+    loss_weighted = sett.loss_weighted
+    delta_time = sett.delta_time
+    shift_by_max_val = sett.shift_by_max_val
 
-    def softadapt_decorator(loss_terms):
+    # Get finite difference coefficients for calculating rates of change for loss terms
+    fdm_coeff = get_fdm_coeff(order, backward=True)
+
+    def softadapt_decorator(loss_terms: Callable[..., jax.Array]):
         """
         This is the decorator.
         """
-
-        # Get finite difference coefficients for calculating rates of change for loss terms
-        fdm_coeff = jnp.flip(backwards_fdm_coeff(order))
-
-        shift = shift_by_max_val
         
         @wraps(loss_terms)
         def wrapper(*args, prevlosses=None, **kwargs):
@@ -76,10 +86,11 @@ def softadapt(order: int = 6,
                 prevlosses = jnp.tile(losses, order+1).reshape((order+1, losses.shape[0]))
 
             # Insert newest loss values and push out oldest loss values
-            prevlosses = jnp.roll(prevlosses, -1, axis=0).at[-1, :].set(losses)
+            # prevlosses = jnp.roll(prevlosses, -1, axis=0).at[-1, :].set(losses)
+            prevlosses = jnp.concatenate((prevlosses[:-1, :], losses.reshape(1, -1)))
             
             # Calculate loss slopes using finite difference
-            rates_of_change = -jnp.matmul(fdm_coeff, prevlosses)
+            rates_of_change = jnp.matmul(fdm_coeff, prevlosses)
             
             # Normalize slopes
             if normalized:
@@ -88,7 +99,7 @@ def softadapt(order: int = 6,
                 rates_of_change = jnp.divide(rates_of_change, delta_time)
 
             # Call custom SoftMax function
-            weights = softmax(rates_of_change, beta=beta, shift_by_max_value=shift)
+            weights = softmax(rates_of_change, beta=beta, shift_by_max_value=shift_by_max_val)
 
             # Weight by loss values
             if loss_weighted:
