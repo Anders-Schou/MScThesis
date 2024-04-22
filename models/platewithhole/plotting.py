@@ -64,7 +64,7 @@ def plot_loss(
     plt.clf()
     return
 
-def get_plot_data(geometry_settings, hessian, params, grid, mesh_data=None):
+def get_plot_data(geometry_settings, hessian, params, grid, mesh_data=None, **kwargs):
         if mesh_data is not None:
                 radius = geometry_settings["domain"]["circle"]["radius"]
                 
@@ -136,17 +136,17 @@ def get_plot_data(geometry_settings, hessian, params, grid, mesh_data=None):
                 sigma_polar_list = [sigma_polar[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
 
                 # Calculate true stresses (cartesian and polar)
-                sigma_cart_true = jax.vmap(analytic.cart_stress_true)(plotpoints)
+                sigma_cart_true = jax.vmap(analytic.cart_stress_true)(plotpoints, **kwargs)
                 sigma_cart_true_list = [sigma_cart_true.reshape(-1, 4)[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
-                sigma_polar_true = jax.vmap(analytic.polar_stress_true)(plotpoints_polar)
+                sigma_polar_true = jax.vmap(analytic.polar_stress_true)(plotpoints_polar, **kwargs)
                 sigma_polar_true_list = [sigma_polar_true.reshape(-1, 4)[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
 
                 return X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list, plotpoints, plotpoints2
 
 
-def plot_results(geometry_settings, hessian, params, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, mesh_data=None):
+def plot_results(geometry_settings, hessian, params, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, mesh_data=None, **kwargs):
 
-        X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = get_plot_data(geometry_settings, hessian, params, grid=grid, mesh_data=mesh_data)
+        X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = get_plot_data(geometry_settings, hessian, params, grid=grid, mesh_data=mesh_data, **kwargs)
         radius = geometry_settings["domain"]["circle"]["radius"]
 
         if save:

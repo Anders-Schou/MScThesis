@@ -6,37 +6,25 @@ import jax.numpy as jnp
 from utils.transforms import xy2r, xy2theta, xy2rtheta, polar2cart_tensor, cart2polar_tensor
 
 _TENSION = 10
+_RADIUS = 2
 
 
-# def polar_sol_true(r, theta, S = 10, a = 2):
-#     a2 = a*a
-#     r2 = jnp.square(r)
-#     A = -S * 0.25
-#     B = 0
-#     C = -a2**2 * S * 0.25
-#     D = a2 * S * 0.5
-#     return (A*r2 + B*r2**2 + C / r2 + D) * jnp.cos(2*theta)
 
-
-# def cart_sol_true(x, y, **kwargs):
-#     return polar_sol_true(xy2r(x, y), xy2theta(x, y), **kwargs)
-
-
-def sigma_rr_true(r, theta, S = 10, a = 2):
+def sigma_rr_true(r, theta, S = _TENSION, a = _RADIUS):
     a2 = jnp.array(a*a)
     r2 = jnp.square(r)
     a2divr2 = jnp.divide(a2, r2)
     return 0.5*S * ((1 + 3 * jnp.square(a2divr2) - 4 * a2divr2) * jnp.cos(2*theta) + (1 - a2divr2))
 
 
-def sigma_tt_true(r, theta, S = 10, a = 2):
+def sigma_tt_true(r, theta, S = _TENSION, a = _RADIUS):
     a2 = jnp.array(a*a)
     r2 = jnp.square(r)
     a2divr2 = jnp.divide(a2, r2)
     return 0.5*S * ((1 + a2divr2) - (1 + 3 * jnp.square(a2divr2)) * jnp.cos(2*theta))
 
 
-def sigma_rt_true(r, theta, S = 10, a = 2):
+def sigma_rt_true(r, theta, S = _TENSION, a = _RADIUS):
     a2 = jnp.array(a*a)
     r2 = jnp.square(r)
     a2divr2 = jnp.divide(a2, r2)

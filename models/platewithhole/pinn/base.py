@@ -56,7 +56,7 @@ class PlateWithHolePINN(PINN):
                       |
                       V
 
-                   PWHPINN
+               PlateWithHolePINN
 
                       |
                       V

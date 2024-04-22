@@ -5,6 +5,12 @@ import jax
 import jax.numpy as jnp
 
 
+def gradient(model: Callable, argnums=1, rev = True) -> Callable:
+    if rev:
+        return jax.jacrev(model, argnums=argnums)
+    return jax.jacfwd(model, argnums=argnums)
+
+
 def hessian(model: Callable, argnums=1) -> Callable:
     return jax.hessian(model, argnums=argnums)
 

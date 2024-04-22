@@ -9,7 +9,7 @@ def sq(r: jax.Array) -> jax.Array:
 def sqe(u: jax.Array, u_true: jax.Array | None = None):
     if u_true is None:
         return sq(u)
-    return sq(jnp.subtract(u, u_true))
+    return sq(jnp.subtract(u.ravel(), u_true.ravel()))
 
 
 def ms(r: jax.Array) -> float:
@@ -19,7 +19,7 @@ def ms(r: jax.Array) -> float:
 def mse(u: jax.Array, u_true: jax.Array | None = None):
     if u_true is None:
         return ms(u)
-    return ms(jnp.subtract(u, u_true))
+    return ms(jnp.subtract(u.ravel(), u_true.ravel()))
 
 
 # def get_loss(loss_terms: list[Callable], loss_type: str = "mse"):

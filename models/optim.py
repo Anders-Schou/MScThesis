@@ -102,13 +102,17 @@ def _verbose_update(print_every = LoggingSettings.print_every):
 
             if epoch % print_every == 0:
                 tcurr = perf_counter()
+                if len(weights.shape) == 0:
+                    ww = [weights]
+                else:
+                    ww = weights
                 print(f"Training time: {tcurr-start_time:>7.2f} s    "
                       f"Epoch: {epoch:>6}    "
                       f"Learning rate: {learning_rate:2.2e}    "
                       f"Weighted loss: {total_loss:2.2e}    "
                       f"Unweighted loss: {jnp.sum(prevlosses[-1]):2.2e}")
                 print("Weights:     ", end="")
-                [print(f"{w:2.2e}", end="  ") for w in weights]
+                [print(f"{w:2.2e}", end="  ") for w in ww]
                 print("")
                 print("Loss terms:  ", end="")
                 [print(f"{l:2.2e}", end="  ") for l in prevlosses[-1]]
