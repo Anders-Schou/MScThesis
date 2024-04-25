@@ -377,11 +377,11 @@ def plot_boundaries(geometry_settings, hessian, params, fig_dir, log_dir, save=T
         b1x = jnp.full_like(b1y, xlim[1])
         b1 = jnp.hstack((b1x, b1y))
         
-        b2x = jnp.linspace(xlim[0], xlim[1], grid).reshape(-1,1)
+        b2x = jnp.linspace(xlim[1], xlim[0], grid).reshape(-1,1)
         b2y = jnp.full_like(b2x, ylim[1])
         b2 = jnp.hstack((b2x, b2y))
 
-        b3y = jnp.linspace(ylim[0], ylim[1], grid).reshape(-1,1)
+        b3y = jnp.linspace(ylim[1], ylim[0], grid).reshape(-1,1)
         b3x = jnp.full_like(b3y, xlim[0])
         b3 = jnp.hstack((b3x, b3y))
 
@@ -396,23 +396,30 @@ def plot_boundaries(geometry_settings, hessian, params, fig_dir, log_dir, save=T
         ax[0, 0].set_title("XX stress", fontsize=_FONTSIZE)
         ax[0, 0].plot(u_true[:, 0], linewidth=2)
         ax[0, 0].plot(u[:, 0], linewidth=2)
+        ax[0, 0].vlines([grid, 2*grid, 3*grid], ymin = min(min(u_true[:, 0]), min(u[:, 0])), ymax = max(max(u_true[:, 0]), max(u[:, 0])), colors='black')
         
         ax[0, 1].set_title("XY stress", fontsize=_FONTSIZE)
         ax[0, 1].plot(u_true[:, 1], linewidth=2)
         ax[0, 1].plot(u[:, 1], linewidth=2)
-        
+        ax[0, 1].vlines([grid, 2*grid, 3*grid], ymin = min(min(u_true[:, 1]), min(u[:, 1])), ymax = max(max(u_true[:, 1]), max(u[:, 1])), colors='black')
+                
         ax[0, 2].set_title("YY stress", fontsize=_FONTSIZE)
         ax[0, 2].plot(u_true[:, 3], linewidth=2)
         ax[0, 2].plot(u[:, 3], linewidth=2)
+        ax[0, 2].vlines([grid, 2*grid, 3*grid], ymin = min(min(u_true[:, 3]), min(u[:, 3])), ymax = max(max(u_true[:, 3]), max(u[:, 3])), colors='black')
         
         ax[1, 0].set_title("XX error", fontsize=_FONTSIZE)
-        ax[1, 0].semilogy(jnp.abs(u_true[:, 0] - u[:,0]), linewidth=2)
+        ax[1, 0].semilogy(jnp.abs(u_true[:, 0] - u[:, 0]), linewidth=2)
+        ax[1, 0].vlines([grid, 2*grid, 3*grid], ymin = 0, ymax = max(jnp.abs(u_true[:, 0] - u[:, 0])), colors='black')
          
         ax[1, 1].set_title("XY error", fontsize=_FONTSIZE)
-        ax[1, 1].semilogy(jnp.abs(u_true[:, 1] - u[:,1]), linewidth=2)
+        ax[1, 1].semilogy(jnp.abs(u_true[:, 1] - u[:, 1]), linewidth=2)
+        ax[1, 1].vlines([grid, 2*grid, 3*grid], ymin = 0, ymax = max(jnp.abs(u_true[:, 1] - u[:, 1])), colors='black')
         
         ax[1, 2].set_title("YY error", fontsize=_FONTSIZE)
-        ax[1, 2].semilogy(jnp.abs(u_true[:, 3] - u[:,3]), linewidth=2)
+        ax[1, 2].semilogy(jnp.abs(u_true[:, 3] - u[:, 3]), linewidth=2)
+        ax[1, 2].vlines([grid, 2*grid, 3*grid], ymin = 0, ymax = max(jnp.abs(u_true[:, 3] - u[:, 3])), colors='black')
+        
         for i in ax.ravel():
             for item in ([i.xaxis.label, i.yaxis.label] + i.get_xticklabels() + i.get_yticklabels()):
                 item.set_fontsize(20)
