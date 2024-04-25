@@ -39,9 +39,8 @@ def unweighted(sett: UnweightedSettings) -> Callable[..., Callable]:
                 prevlosses = jnp.tile(losses, save_last).reshape((save_last, losses.shape[0]))
 
             # Insert newest loss values and push out oldest loss values
-            # prevlosses = jnp.roll(prevlosses, -1, axis=0).at[-1, :].set(losses)
-            prevlosses = jnp.concatenate((prevlosses[:-1, :], losses.reshape(1, -1)))
-
+            prevlosses = jnp.roll(prevlosses, -1, axis=0).at[-1, :].set(losses)
+            
             weights = jnp.ones_like(losses)
 
             if normalized:

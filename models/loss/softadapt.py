@@ -86,8 +86,7 @@ def softadapt(sett: SoftAdaptSettings) -> Callable[..., Callable]:
                 prevlosses = jnp.tile(losses, order+1).reshape((order+1, losses.shape[0]))
 
             # Insert newest loss values and push out oldest loss values
-            # prevlosses = jnp.roll(prevlosses, -1, axis=0).at[-1, :].set(losses)
-            prevlosses = jnp.concatenate((prevlosses[:-1, :], losses.reshape(1, -1)))
+            prevlosses = jnp.roll(prevlosses, -1, axis=0).at[-1, :].set(losses)
             
             # Calculate loss slopes using finite difference
             rates_of_change = jnp.matmul(fdm_coeff, prevlosses)
