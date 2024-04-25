@@ -5,5 +5,7 @@ from ._utils import (
     sq,
     sqe,
     ms,
-    mse
+    mse,
+    mae,
+    maxabse
 )

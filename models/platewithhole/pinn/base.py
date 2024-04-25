@@ -178,6 +178,17 @@ class PlateWithHolePINN(PINN):
         # Compute losses
         losses = pwhloss.loss_data(out, true_val=true_val)
         return losses
+    
+    def loss_rect_extra(self, params, input: tuple[jax.Array], true_val: dict[str, jax.Array] | None = None):
+        # Compute Hessian values for each of the four sides
+        out0 = netmap(self.hessian)(params, input[0]).reshape(-1, 4) # horizontal lower
+        out1 = netmap(self.hessian)(params, input[1]).reshape(-1, 4) # vertical right
+        out2 = netmap(self.hessian)(params, input[2]).reshape(-1, 4) # horizontal upper
+        out3 = netmap(self.hessian)(params, input[3]).reshape(-1, 4) # vertical left
+
+        # Compute losses for all four sides of rectangle
+        losses  = pwhloss.loss_rect_extra(out0, out1, out2, out3, true_val=true_val)
+        return losses
 
     def sample_points(self):
         """
@@ -276,3 +287,10 @@ class PlateWithHolePINN(PINN):
         pwhplot.plot_results(self.geometry_settings, self.jitted_hessian, self.params, 
                              self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step, 
                              grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"], mesh_data=self.mesh_data)
+        
+        
+    def plot_boundaries(self, save=True, log=False, step=None):
+        pwhplot.plot_boundaries(self.geometry_settings, self.jitted_hessian, self.params, 
+                             self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step, 
+                             grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"])
+        

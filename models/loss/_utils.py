@@ -22,6 +22,21 @@ def mse(u: jax.Array, u_true: jax.Array | None = None):
     return ms(jnp.subtract(u.ravel(), u_true.ravel()))
 
 
+def ma(r: jax.Array) -> float:
+    return jnp.mean(jnp.abs(r))
+
+
+def mae(u: jax.Array, u_true: jax.Array | None = None):
+    if u_true is None:
+        return ma(u)
+    return ma(jnp.subtract(u.ravel(), u_true.ravel()))
+
+def maxabse(u: jax.Array, u_true: jax.Array | None = None):
+    if u_true is None:
+        return jnp.max(jnp.abs(u))
+    return jnp.max(jnp.abs(jnp.subtract(u.ravel(), u_true.ravel())))
+
+
 # def get_loss(loss_terms: list[Callable], loss_type: str = "mse"):
 #     """
 #     INPUTS:
