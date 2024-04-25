@@ -52,8 +52,8 @@ def loss_rect_extra(*output: jax.Array, true_val: dict[str, jax.Array] | None = 
     if true_val is None:
         return mse(out0[:, 3]), mse(out1[:, 0]), \
                mse(out2[:, 3]), mse(out3[:, 0])
-    return mse(out0[:, 0], true_val.get("yy0")), mse(out1[:, 1], true_val.get("xx1")), \
-           mse(out2[:, 3], true_val.get("yy2")), mse(out3[:, 2], true_val.get("xx3"))
+    return mse(out0[:, 3], true_val.get("yy0")), mse(out1[:, 0], true_val.get("xx1")), \
+           mse(out2[:, 3], true_val.get("yy2")), mse(out3[:, 0], true_val.get("xx3"))
 
 
 def loss_circ_rr_rt(input: jax.Array, output: jax.Array, true_val: dict[str, jax.Array] | None = None):
