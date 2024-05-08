@@ -1,6 +1,8 @@
 from collections.abc import Sequence
+import math
 
 import numpy as np
+from scipy.stats.qmc import Sobol
 import jax
 import jax.numpy as jnp
 import jax.tree_util as jtu
@@ -9,6 +11,27 @@ import torch.utils.data
 
 from datahandlers.samplers import sample_line
 from utils.utils import limits2vertices, remove_points, keep_points
+
+
+def generate_interval_points(key: jax.random.PRNGKey,
+                             xlim: Sequence[float],
+                             num_points: int,
+                             sobol: bool = True
+                             ):
+    
+    s_key, key = jax.random.split(key, 2)
+    if sobol:
+        # Use Sobol QMC sampling (convert key to seed, to make sampling "deterministic")
+        xp = Sobol(1, seed=int(jax.random.randint(s_key, (), 0,
+                                                  jnp.iinfo(jnp.int32).max))
+            ).random_base2(math.ceil(jnp.log2(num_points)))
+        
+        return jnp.array(xp*(xlim[1]-xlim[0]) + xlim[0])
+    
+    # Use uniform sampling
+    return jax.random.uniform(s_key, (num_points, 1), minval=xlim[0], maxval=xlim[1])
+    
+
 
 
 def generate_rectangle_points(key: jax.random.PRNGKey,
@@ -41,7 +64,7 @@ def generate_rectangle_points(key: jax.random.PRNGKey,
 def generate_circle_points(key: jax.random.PRNGKey,
                            radius: float,
                            num_points: int
-                           ) -> jnp.ndarray:
+                           ) -> jax.Array:
     theta = jax.random.uniform(key, (num_points, 1), minval=0, maxval=2*jnp.pi)
     xc = radius*jnp.cos(theta)
     yc = radius*jnp.sin(theta)
@@ -52,17 +75,29 @@ def generate_circle_points(key: jax.random.PRNGKey,
 def generate_collocation_points(key: jax.random.PRNGKey,
                                 xlim: Sequence[float],
                                 ylim: Sequence[float],
-                                num_coll: int) -> jnp.ndarray:
-    shape_pde = (num_coll, 1)
+                                num_coll: int,
+                                sobol: bool = True) -> jax.Array:
     
+    if sobol:
+        # Use Sobol QMC sampling (convert key to seed, to make sampling "deterministic")
+        s_key, key = jax.random.split(key, 2)
+        xp = Sobol(2, seed=int(jax.random.randint(s_key, (), 0,
+                                                  jnp.iinfo(jnp.int32).max))
+            ).random_base2(math.ceil(jnp.log2(num_coll)))
+        
+        xp[:, 0] = xp[:, 0]*(xlim[1]-xlim[0]) + xlim[0]
+        xp[:, 1] = xp[:, 1]*(ylim[1]-ylim[0]) + ylim[0]
+        return jnp.array(xp)
+    
+    # Uniform sampling
+    shape_pde = (num_coll, 1)
     x_key, y_key = jax.random.split(key, 2)
-
     x_train = jax.random.uniform(x_key, shape_pde, minval=xlim[0], maxval=xlim[1])
     y_train = jax.random.uniform(y_key, shape_pde, minval=ylim[0], maxval=ylim[1])
     xp = jnp.stack([x_train, y_train], axis=1).reshape((-1,2))
     
     return xp
-
+    
 
 def generate_extra_points(keyr, keytheta, radius, num_extra):
     theta_rand = jax.random.uniform(keytheta, (num_extra, 1), minval=0, maxval=2*jnp.pi)
@@ -75,8 +110,9 @@ def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
                                           radius: float, 
                                           xlim: Sequence[float],
                                           ylim: Sequence[float],
-                                          points: int | Sequence[int] | None
-                                          ):
+                                          points: int | Sequence[int] | None,
+                                          sobol: bool = True
+                                          ) -> jax.Array:
     """
     This function samples points in the inner of the domain.
     """
@@ -90,14 +126,14 @@ def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
 
     # Initial coll point gen
     key, key_coll = jax.random.split(key)
-    xy_coll = generate_collocation_points(key_coll, xlim, ylim, num_coll)
+    xy_coll = generate_collocation_points(key_coll, xlim, ylim, num_coll, sobol=sobol)
     xy_coll = remove_points(xy_coll, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
     
     # Filler coll point gen
     pnum = xy_coll.shape[0]
     while pnum < num_coll:
         key, key_coll = jax.random.split(key_coll)
-        tmp = generate_collocation_points(key_coll, xlim, ylim, num_coll)
+        tmp = generate_collocation_points(key_coll, xlim, ylim, num_coll, sobol=sobol)
         tmp = remove_points(tmp, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
         xy_coll = jnp.concatenate((xy_coll, tmp))
         pnum = xy_coll.shape[0]
@@ -136,7 +172,9 @@ def generate_rectangle_with_hole(key: jax.random.PRNGKey,
                                  ylim: Sequence[float],
                                  num_coll: int | Sequence[int],
                                  num_rect: int | Sequence[int],
-                                 num_circ: int) -> dict[str, jax.Array | tuple[jax.Array]]:
+                                 num_circ: int,
+                                 sobol: bool = True
+                                 ) -> dict[str, jax.Array | tuple[jax.Array]]:
     """
     Main function for generating necessary sample points for the plate-with-hole problem.
 
@@ -146,13 +184,33 @@ def generate_rectangle_with_hole(key: jax.random.PRNGKey,
 
     key, rectkey, circkey, collkey, permkey = jax.random.split(key, 5)
 
-    xy_coll = generate_collocation_points_with_hole(collkey, radius, xlim, ylim, num_coll)
+    xy_coll = generate_collocation_points_with_hole(collkey, radius, xlim, ylim, num_coll, sobol=sobol)
     xy_coll = jax.random.permutation(permkey, xy_coll)
     xy_rect = generate_rectangle_points(rectkey, xlim, ylim, num_rect)
     xy_circ = generate_circle_points(circkey, radius, num_circ)
     # xy_test = generate_collocation_points_with_hole(testkey, radius, xlim, ylim, num_test)
     return {"coll": xy_coll, "rect": xy_rect, "circ": xy_circ}
     
+
+def generate_rectangle(key: jax.random.PRNGKey,
+                                 xlim: Sequence[float],
+                                 ylim: Sequence[float],
+                                 num_coll: int | Sequence[int],
+                                 num_rect: int | Sequence[int]) -> dict[str, jax.Array | tuple[jax.Array]]:
+    """
+    Main function for generating necessary sample points for the square problem.
+
+    The function generates 
+    """
+
+
+    key, rectkey, collkey, permkey = jax.random.split(key, 4)
+
+    xy_coll = generate_collocation_points(collkey, xlim, ylim, num_coll)
+    xy_coll = jax.random.permutation(permkey, xy_coll)
+    xy_rect = generate_rectangle_points(rectkey, xlim, ylim, num_rect)
+    return {"coll": xy_coll, "rect": xy_rect}
+
 
 def resample(new_arr: jax.Array, new_loss: jax.Array, num_keep: int):
     """

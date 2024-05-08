@@ -99,4 +99,4 @@ def loss_data(output: jax.Array, true_val: dict[str, jax.Array] | None = None):
         return mse(output[:, 3]), mse(output[:, 1]), mse(output[:, 0])
     return mse( output[:, 3], true_val.get("true_xx")), \
            mse(-output[:, 1], true_val.get("true_xy")), \
-           mse( output[:, 0], true_val.get("true_yy")),
+           mse( output[:, 0], true_val.get("true_yy"))

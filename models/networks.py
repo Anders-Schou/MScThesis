@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from collections.abc import Callable, Sequence
 
 import jax
+import jax.numpy as jnp
 import flax.linen as nn
 
 from setup.parsers import (
@@ -35,6 +36,9 @@ class MLP(nn.Module):
     hidden_dims: Sequence[int]
     activation: Sequence[Callable]
     initialization: Sequence[Callable]
+    embed: dict = False
+    polar: bool = False
+    periodic: bool = False
 
     @nn.compact
     def __call__(self, input, transform = None):
@@ -43,6 +47,17 @@ class MLP(nn.Module):
             x = transform(input)
         else:
             x = input
+        
+        if self.polar:
+            r = jnp.linalg.norm(x)
+            theta = jnp.arctan2(x.ravel()[1], x.ravel()[0])
+            x = jnp.array([r, theta])
+
+        if self.embed:
+            x = FourierEmbedding(1.0, 64)(x)
+
+        if self.periodic:
+            x = jnp.cos(2*jnp.pi*x)
         
         for i, feats in enumerate(self.hidden_dims):
             x = nn.Dense(features=feats,
@@ -66,6 +81,50 @@ class MLP(nn.Module):
         s += f"initialization:   {[f.__name__ for f in self.initialization]}\n"
         s += f"\n"
         return s
+
+
+class ModifiedMLP(nn.Module):
+    name: str
+    input_dim: int
+    output_dim: int
+    hidden_dims: Sequence[int]
+    activation: Sequence[Callable]
+    initialization: Sequence[Callable]
+    embed: bool = False
+
+    @nn.compact
+    def __call__(self, input, transform = None):
+        
+        if transform is not None:
+            x = transform(input)
+        else:
+            x = input
+        
+        if self.embed:
+            x = FourierEmbedding(1.0, 128)(x)
+        
+        u = nn.Dense(features=self.hidden_dims[0],
+                     kernel_init=self.initialization[0](),
+                     name=f"{self.name}_u")(x)
+        v = nn.Dense(features=self.hidden_dims[0],
+                     kernel_init=self.initialization[0](),
+                     name=f"{self.name}_v")(x)
+        
+        u = self.activation[0](u)
+        v = self.activation[0](v)
+
+        for i, feats in enumerate(self.hidden_dims):
+            x = nn.Dense(features=feats,
+                         kernel_init=self.initialization[i](),
+                         name=f"{self.name}_linear{i}")(x)
+            x = self.activation[i](x)
+            x = x*u  + (1-x)*v
+        
+        x = nn.Dense(features=self.output_dim,
+                     kernel_init=self.initialization[-1](),
+                     name=f"{self.name}_linear_output")(x)
+        
+        return x
 
 
 class ResNetBlock(nn.Module):
@@ -175,6 +234,23 @@ class ResNetBlock(nn.Module):
         return s
 
 
+class FourierEmbedding(nn.Module):
+    # Source: https://github.com/PredictiveIntelligenceLab/jaxpi/blob/main/jaxpi/archs.py
+    embed_scale: float
+    embed_dim: int
+
+    @nn.compact
+    def __call__(self, x):
+        kernel = self.param(
+            "kernel", nn.initializers.normal(self.embed_scale), (x.shape[-1], self.embed_dim // 2)
+        )
+        # y = jnp.concatenate(
+        #     [jnp.cos(jnp.dot(x, kernel)), jnp.sin(jnp.dot(x, kernel))], axis=-1
+        # )
+        y = jnp.cos(jnp.dot(x, kernel))
+        return y
+
+
 def netmap(model: Callable[..., jax.Array], **kwargs) -> Callable[..., jax.Array]:
     """
     Applies the jax.vmap function with in_axes=(None, 0).
@@ -194,6 +270,10 @@ def setup_network(network_settings: dict[str, str | dict]) -> MLP | ResNetBlock:
             parsed_settings = parse_MLP_settings(network_settings["specifications"])
             return MLP(**parsed_settings)
 
+        case "modifiedmlp":
+            parsed_settings = parse_MLP_settings(network_settings["specifications"])
+            return ModifiedMLP(**parsed_settings)
+        
         case "resnet":
             parsed_settings = parse_ResNetBlock_settings(network_settings["specifications"])
             return ResNetBlock(**parsed_settings)
