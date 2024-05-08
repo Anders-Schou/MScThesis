@@ -68,9 +68,11 @@ def _get_update(loss_fun: Callable,
         opt_state: optax.OptState,
         params: optax.Params,
         inputs: dict[str],
+        weights: jax.Array | None = None,
         true_val: dict[str] | None = None,
         update_key: int | None = None,
-        prevlosses: jax.Array | None = None
+        prevlosses: jax.Array | None = None,
+        **kwargs
     ) -> tuple[optax.Params, optax.OptState, float, jax.Array, jax.Array]:
         """
         Update function for loss.
@@ -78,12 +80,12 @@ def _get_update(loss_fun: Callable,
 
         # Compute loss and gradients
         (total_loss, aux), grads = jax.value_and_grad(loss_fun, has_aux=True)(
-            params, inputs, true_val=true_val, update_key=update_key, prevlosses=prevlosses)
+            params, inputs, weights=weights, true_val=true_val, update_key=update_key, prevlosses=prevlosses)
 
         # Apply updates
         updates, opt_state = optimizer.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)
-
+        
         # Return updated params and state as well as the losses
         return params, opt_state, total_loss, *aux
     return update
@@ -98,8 +100,8 @@ def _verbose_update(print_every = LoggingSettings.print_every):
         def wrapper(*args, epoch, learning_rate, start_time, **kwargs):
             
             # Call update function
-            params, opt_state, total_loss, prevlosses, weights = update_func(*args, **kwargs)
-
+            params, opt_state, total_loss, prevlosses = update_func(*args, **kwargs)
+            weights = kwargs["weights"]
             if epoch % print_every == 0:
                 tcurr = perf_counter()
                 if len(weights.shape) == 0:
@@ -118,6 +120,6 @@ def _verbose_update(print_every = LoggingSettings.print_every):
                 [print(f"{l:2.2e}", end="  ") for l in prevlosses[-1]]
                 print("\n\n")
 
-            return params, opt_state, total_loss, prevlosses, weights
+            return params, opt_state, total_loss, prevlosses
         return wrapper
     return decorator

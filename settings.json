@@ -1,13 +1,21 @@
 {
-    "id": "010",
+    "id": "005",
     "seed": 1234,
 
     "io": {
-        "base_dir": "/zhome/e8/9/147091/MSc/experiments/11",
-        "figure_dir": "/zhome/e8/9/147091/MSc/experiments/11/figures",
-        "model_dir": "/zhome/e8/9/147091/MSc/experiments/11/models",
-        "image_dir": "/zhome/e8/9/147091/MSc/experiments/11/images",
-        "log_dir": "/zhome/e8/9/147091/MSc/experiments/11/logs"
+        "base_dir": "/zhome/74/7/147523/MSc/experiments/01",
+        "figure_dir": "/zhome/74/7/147523/MSc/experiments/01/figures",
+        "model_dir": "/zhome/74/7/147523/MSc/experiments/01/models",
+        "image_dir": "/zhome/74/7/147523/MSc/experiments/01/images",
+        "log_dir": "/zhome/74/7/147523/MSc/experiments/01/logs"
+    },
+    
+    "verbosity": {
+        "init": true,
+        "training": false,
+        "evaluation": true,
+        "plotting": true,
+        "sampling": true
     },
 
     "geometry": {
@@ -20,30 +28,36 @@
     "run": {
         "train": {
             "sampling": {
-                "coll": [5000, 1000],
+                "coll": [5000, 50],
                 "rect": [1000, 1000, 1000, 1000],
-                "circ": 2000,
-                "data": [50, 50]
+                "circ": 1000,
+                "data": [10, 10]
             },
-            "iterations": 50000,
+            "iterations": 200000,
             "optimizer": "adam",
-            "update_scheme": "weighted",
+            "update_scheme": "running_average",
+            "update_weights_every": 100,
             "update_kwargs": {
                 "softadapt": {
                     "order": 4,
-                    "beta": 0.01,
-                    "loss_weighted": true,
-                    "normalized": true
+                    "beta": 0.1,
+                    "loss_weighted": false,
+                    "normalized": false
                 },
                 "unweighted": {
                     "normalized": true,
                     "save_last": 5
                 },
                 "weighted": {
-                    "weights": [5, 5, 2]
+                    "weights": [5, 5, 2],
+                    "normalized": false
+                },
+                "running_average": {
+                    "alpha": 0.9,
+                    "normalized": false
                 }
             },
-            "learning_rate": 5e-3,
+            "learning_rate": 5e-2,
             "batch_size": null,
             "decay_rate": 0.90,
             "decay_steps": 2000,
@@ -77,17 +91,7 @@
                     "specifications": {
                         "input_dim": 2,
                         "output_dim": 1,
-                        "hidden_dims": [128, 128],
-                        "activation": "silu",
-                        "initialization": "glorot_normal"
-                    }
-                },
-                {
-                    "architecture": "mlp",
-                    "specifications": {
-                        "input_dim": 2,
-                        "output_dim": 1,
-                        "hidden_dims": [128, 128],
+                        "hidden_dims": [128],
                         "activation": "silu",
                         "initialization": "glorot_normal"
                     }
@@ -119,7 +123,7 @@
         },
         "results": {
             "do_plots": true,
-            "plot_every": null,
+            "plot_every": 5000,
             "overwrite": false,
             "file_extension": "png"
         },

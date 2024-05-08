@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from collections.abc import Callable
 import pathlib
@@ -176,6 +177,13 @@ class UnweightedSettings(Settings):
 
 
 @dataclass
+class RunningAverageSettings(Settings):
+    normalized: bool = False
+    alpha: float = 0.9
+    save_last: int = 5
+
+
+@dataclass
 class MLPSettings(Settings):
     name: str = "MLP"
     input_dim: int = 1
@@ -217,7 +225,7 @@ def log_settings(settings_dict: dict,
         json_hp = json.dumps(hp, indent=2)
         return "".join("\t" + line for line in json_hp.splitlines(True))
     
-    # os.system("rm -rf " + settings["io"]["log_dir"]+"/"+settings["id"]+"/*")
+    os.system(f"rm -rf {log_dir}/*")
     writer = SummaryWriter(log_dir=log_dir)
     writer.add_text("settings.json", pretty_json(settings_dict))
     writer.close()

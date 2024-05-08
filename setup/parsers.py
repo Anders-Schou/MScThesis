@@ -19,6 +19,7 @@ from setup.settings import (
     PlottingSettings,
     DirectorySettings,
     SoftAdaptSettings,
+    RunningAverageSettings,
     WeightedSettings,
     UnweightedSettings,
     SupportedActivations,
@@ -52,8 +53,6 @@ def parse_arguments() -> dict:
 
 def parse_verbosity_settings(settings_dict: dict | None = None):
     if settings_dict is None:
-        return VerbositySettings()
-    if settings_dict.get("all") is not None:
         return VerbositySettings()
     return VerbositySettings(**settings_dict)
 
@@ -320,6 +319,10 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     # update_scheme
     if settings_dict.get("update_scheme") is not None:
         settings.update_scheme = settings_dict["update_scheme"].lower()
+        
+    # update_scheme
+    if settings_dict.get("update_weights_every") is not None:
+        settings.update_weights_every = settings_dict["update_weights_every"]
     
     # update_kwargs
     if settings_dict.get("update_kwargs") is not None:
@@ -332,6 +335,14 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
                 )
             except KeyError:
                 settings.update_kwargs["softadapt"] = settings2dict(SoftAdaptSettings())
+                
+        elif settings.update_scheme == "running_average":
+            try:
+                settings.update_kwargs["running_average"] = settings2dict(
+                    RunningAverageSettings(**settings_dict["update_kwargs"]["running_average"])
+                )
+            except KeyError:
+                settings.update_kwargs["running_average"] = settings2dict(RunningAverageSettings())
         
         elif settings.update_scheme == "weighted":
             try:

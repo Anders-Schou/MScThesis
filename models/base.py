@@ -4,7 +4,9 @@ import inspect
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
+import matplotlib.pyplot as plt
 
 from setup.settings import (
     ModelNotInitializedError,
@@ -12,7 +14,8 @@ from setup.settings import (
     DefaultSettings,
     SoftAdaptSettings,
     WeightedSettings,
-    UnweightedSettings
+    UnweightedSettings,
+    RunningAverageSettings
 )
 from setup.parsers import (
     parse_verbosity_settings,
@@ -22,7 +25,8 @@ from setup.parsers import (
     parse_run_settings
 )
 from .optim import get_update
-from .loss import softadapt, weighted, unweighted
+from .loss import softadapt, weighted, unweighted, running_average, compute_losses
+from utils.plotting import save_fig
 
 
 class Model(metaclass=ABCMeta):
@@ -172,17 +176,25 @@ class Model(metaclass=ABCMeta):
         # Get default ("unweighted") update function
         fun = getattr(self, loss_term_fun_name)
         
-        # Check if SoftAdapt should be used
+        # # Check if SoftAdapt should be used
+        # if self.train_settings.update_scheme == "softadapt":
+        #     self._loss_terms = softadapt(SoftAdaptSettings(
+        #         **self.train_settings.update_kwargs["softadapt"]))(fun)
+        # elif self.train_settings.update_scheme == "weighted":
+        #     self._loss_terms = weighted(WeightedSettings(
+        #         **self.train_settings.update_kwargs["weighted"]))(fun)
+        # elif self.train_settings.update_scheme == "running_average":
+        #     self._loss_terms = running_average(RunningAverageSettings(
+        #         **self.train_settings.update_kwargs["running_average"]))(fun)
+        # else:
+        #     self._loss_terms = unweighted(UnweightedSettings(
+        #         **self.train_settings.update_kwargs["unweighted"]))(fun)
+        
         if self.train_settings.update_scheme == "softadapt":
-            self._loss_terms = softadapt(SoftAdaptSettings(
+            self._loss_terms = compute_losses(SoftAdaptSettings(
                 **self.train_settings.update_kwargs["softadapt"]))(fun)
-        elif self.train_settings.update_scheme == "weighted":
-            self._loss_terms = weighted(WeightedSettings(
-                **self.train_settings.update_kwargs["weighted"]))(fun)
         else:
-            self._loss_terms = unweighted(UnweightedSettings(
-                **self.train_settings.update_kwargs["unweighted"]))(fun)
-
+            self._loss_terms = compute_losses()(fun)
         return
     
     def _init_prevlosses(self,
@@ -220,11 +232,63 @@ class Model(metaclass=ABCMeta):
         elif self.train_settings.update_scheme == "weighted":
             numrows = self.train_settings.update_kwargs["weighted"]["save_last"]
             self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
+        elif self.train_settings.update_scheme == "running_average":
+            numrows = self.train_settings.update_kwargs["running_average"]["save_last"]
+            self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
         else:
             numrows = self.train_settings.update_kwargs["unweighted"]["save_last"]
             self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
         return
     
+    def get_weights(self,
+                    loss_term_fun: Callable[..., jax.Array],
+                    update_key: int | None = None,
+                    type: str | None = None,
+                    epoch: int = 0,
+                    update_weights_every: int = 1
+                    ) -> None:
+        """
+        Method for initializing array of weights.
+        If weights are None, the method sets weights
+        to an array determined by the loss type.
+        """
+        
+        if not self._initialized():
+            raise ModelNotInitializedError("The model has not been initialized properly.")
+        
+        if not hasattr(self, "weights"):
+            # Calculate initial loss
+            init_loss = loss_term_fun(self.params, self.train_points, 
+                                    true_val=self.train_true_val, update_key=update_key)
+            
+            if len(init_loss.shape) == 0:
+                loss_shape = 1
+            else:
+                loss_shape = init_loss.shape[0]
+
+            # Check which loss to use
+            if self.train_settings.update_scheme == "weighted":
+                if self.weights is None:
+                    curr_weights = self.train_settings.update_kwargs["weighted"]["weights"]
+                    if loss_shape > len(curr_weights):
+                        self.weights = jnp.concatenate([jnp.array(curr_weights), jnp.ones((loss_shape - len(curr_weights),))])
+                else:
+                    self.weights = self.weights
+            else:
+                self.weights = jnp.ones((loss_shape))
+            
+        if (epoch % update_weights_every) == update_weights_every-1:
+            if type.lower() == "softadapt":
+                _, self.prevlosses, self.weights = softadapt(SoftAdaptSettings(**self.train_settings.update_kwargs["softadapt"]))(loss_term_fun)(self.params, self.train_points, 
+                                                                                                                                    true_val=self.train_true_val, update_key=update_key,
+                                                                                                                                    prevlosses=self.prevlosses)
+            elif type.lower() == "running_average":
+                _, _, self.weights = running_average(RunningAverageSettings(**self.train_settings.update_kwargs["running_average"]))(loss_term_fun)(self.params, self.train_points, 
+                                                                                                                                true_val=self.train_true_val, update_key=update_key,
+                                                                                                                                weights=self.weights, prevlosses=self.prevlosses)
+        
+        return
+
     def _set_update(self,
                     loss_fun_name: str = "_total_loss",
                     optimizer_name: str = "optimizer"
@@ -247,7 +311,7 @@ class Model(metaclass=ABCMeta):
         self.update = get_update(loss_fun,
                                  optimizer,
                                  self.train_settings.jitted_update,
-                                 verbose=True,
+                                 verbose=self._verbose.training,
                                  verbose_kwargs={"print_every": self.logging.print_every})
         return
     
@@ -308,26 +372,55 @@ class Model(metaclass=ABCMeta):
 
         return s
     
-
-    # def _update_unweighted(self,
-    #                        opt_state: optax.OptState,
-    #                        params: optax.Params,
-    #                        inputs: dict[str],
-    #                        true_val: dict[str] | None = None,
-    #                        update_key: int | None = None,
-    #                        prevlosses: jax.Array | None = None):
-    #     """
-        
-    #     """
-
-    #     # Compute loss and gradients
-    #     (total_loss, aux), grads = jax.value_and_grad(self._total_loss, has_aux=True)(
-    #         params, inputs, true_val=true_val, update_key=update_key, prevlosses=prevlosses)
-
-    #     # Apply updates
-    #     updates, opt_state = self.optimizer.update(grads, opt_state, params)
-    #     params = optax.apply_updates(params, updates)
-
-    #     # Return updated params and state as well as the losses
-    #     return params, opt_state, total_loss, *aux
     
+    def plot_loss(
+    self,
+    loss_arr: jax.Array,
+    loss_map: dict,
+    *,
+    fig_dir,
+    name,
+    epoch_step = None,
+    extension="png",
+    figsize = (35, 30)
+    ) -> None:
+        """
+        Plots losses from array in different subplots according to the specified dict.
+        """
+        
+        num_plots = len(loss_map.keys())
+        fig, ax = plt.subplots(int(np.ceil(np.sqrt(num_plots))), int(np.ceil(np.sqrt(num_plots))), figsize=figsize)
+        plot_split = list(loss_map.keys())
+
+        if epoch_step is not None:
+            epochs = epoch_step*np.arange(loss_arr.shape[0])
+            for i in range(num_plots):
+                ax[np.unravel_index(i, ax.shape)].semilogy(epochs, loss_arr[:, loss_map[plot_split[i]]], linewidth=5)
+                ax[np.unravel_index(i, ax.shape)].tick_params(axis='x')
+                ax[np.unravel_index(i, ax.shape)].tick_params(axis='y')
+                # ax[i].fill_between(epochs[epochs % 10000 >= 5000], 0, facecolor='gray', alpha=.5)
+        else:
+            for i in range(num_plots):
+                ax[np.unravel_index(i, ax.shape)].semilogy(loss_arr[:, loss_map[plot_split[i]]], linewidth=5)
+                ax[np.unravel_index(i, ax.shape)].tick_params(axis='x')
+                ax[np.unravel_index(i, ax.shape)].tick_params(axis='y')
+            
+        save_fig(fig_dir, name, extension, fig=fig)
+        plt.clf()
+        
+        num_plots = len(loss_map.keys())
+        
+        if epoch_step is not None:
+            epochs = epoch_step*np.arange(loss_arr.shape[0])
+            plt.semilogy(epochs, loss_arr, linewidth=2)
+            plt.tick_params(axis='x')
+            plt.tick_params(axis='y')
+        else:
+            plt.semilogy(loss_arr, linewidth=2)
+            plt.tick_params(axis='x')
+            plt.tick_params(axis='y')
+            
+        save_fig(fig_dir, "all_" + name, extension, fig=plt.gcf())
+        
+        return
+        

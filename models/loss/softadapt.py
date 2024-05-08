@@ -81,7 +81,10 @@ def softadapt(sett: SoftAdaptSettings) -> Callable[..., Callable]:
             """
             
             # Calculate losses in original loss_terms function (returns array of loss values)
-            losses = loss_terms(*args, **kwargs)
+            detached_params = jax.lax.stop_gradient(args[0])
+            
+            losses = loss_terms(detached_params, *args[1:], **kwargs)
+            
             if prevlosses is None:
                 prevlosses = jnp.tile(losses, order+1).reshape((order+1, losses.shape[0]))
 

@@ -97,17 +97,20 @@ class PINN(Model):
 
     def log_scalars(self,
                     scalars,
-                    scalar_names,
-                    tag = 'Losses/',
-                    step: int | None = None):
-        writer = SummaryWriter(log_dir=self.dir.log_dir)
-        writer.add_scalars(tag,
-                           {name: np.array(loss) for name, loss in zip(scalar_names, scalars)},
-                           global_step=step)
-                
-        writer.close()
+                    scalar_names: str | None = None,
+                    tag: str | None = None,
+                    step: int | None = None,
+                    log: bool = False,
+                    all_losses: jnp.ndarray | None = None):
+        if log:
+            writer = SummaryWriter(log_dir=self.dir.log_dir)
+            writer.add_scalars(tag,
+                            {name: np.array(loss) for name, loss in zip(scalar_names, scalars)},
+                            global_step=step)
+                    
+            writer.close()
         
-        return
+        return jnp.concatenate([all_losses, scalars.reshape(-1, scalars.shape[0])])
     
     @timer
     def plot_training_points(self, save=True, log=False, step=None):
