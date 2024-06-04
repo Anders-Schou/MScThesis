@@ -1,7 +1,10 @@
+import jax
+import jax.numpy as jnp
+
 from .softadapt import softadapt
 from .unweighted import unweighted
 from .weighted import weighted
-from .running_average import running_average
+from .gradnorm import gradnorm
 from .loss_wrapper import compute_losses
 from ._utils import (
     sq,
@@ -9,5 +12,7 @@ from ._utils import (
     ms,
     mse,
     mae,
-    maxabse
+    maxabse,
+    pnorm,
+    running_average
 )

@@ -10,6 +10,41 @@ from setup.parsers import (
     parse_ResNetBlock_settings
 )
 
+from utils.transforms import xy2r, xy2theta, xy2rtheta
+
+
+class FactDense(nn.Module):
+    # Source: https://github.com/PredictiveIntelligenceLab/jaxpi/blob/main/jaxpi/archs.py
+    features: int
+    kernel_init: Callable = nn.initializers.glorot_normal()
+    bias_init: Callable = nn.initializers.zeros
+    reparam: None | dict = None
+
+    @nn.compact
+    def __call__(self, x):
+        if self.reparam is None:
+            kernel = self.param(
+                "kernel", self.kernel_init, (x.shape[-1], self.features)
+            )
+
+        elif self.reparam["type"] == "weight_fact":
+            g, v = self.param(
+                "kernel",
+                _weight_fact(
+                    self.kernel_init,
+                    mean=self.reparam["mean"],
+                    stddev=self.reparam["stddev"],
+                ),
+                (x.shape[-1], self.features),
+            )
+            kernel = g * v
+
+        bias = self.param("bias", self.bias_init, (self.features,))
+
+        y = jnp.dot(x, kernel) + bias
+
+        return y
+
 
 class MLP(nn.Module):
     """
@@ -36,7 +71,7 @@ class MLP(nn.Module):
     hidden_dims: Sequence[int]
     activation: Sequence[Callable]
     initialization: Sequence[Callable]
-    embed: dict = False
+    embed: int | None = None
     polar: bool = False
     periodic: bool = False
 
@@ -49,25 +84,27 @@ class MLP(nn.Module):
             x = input
         
         if self.polar:
-            r = jnp.linalg.norm(x)
-            theta = jnp.arctan2(x.ravel()[1], x.ravel()[0])
-            x = jnp.array([r, theta])
+            r = jnp.linalg.norm(x, axis=-1)
+            theta = jnp.arctan2(x[1], x[0])
+            x = jnp.concatenate((x, jnp.array([r, jnp.cos(2*theta)])))
 
         if self.embed:
-            x = FourierEmbedding(1.0, 64)(x)
+            x = FourierEmbedding(1.0, self.embed)(x)
 
         if self.periodic:
             x = jnp.cos(2*jnp.pi*x)
         
         for i, feats in enumerate(self.hidden_dims):
-            x = nn.Dense(features=feats,
+            x = FactDense(features=feats,
                          kernel_init=self.initialization[i](),
-                         name=f"{self.name}_linear{i}")(x)
+                         name=f"{self.name}_linear{i}",
+                         reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
             x = self.activation[i](x)
         
-        x = nn.Dense(features=self.output_dim,
+        x = FactDense(features=self.output_dim,
                      kernel_init=self.initialization[-1](),
-                     name=f"{self.name}_linear_output")(x)
+                     name=f"{self.name}_linear_output",
+                     reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
         
         return x
 
@@ -91,6 +128,7 @@ class ModifiedMLP(nn.Module):
     activation: Sequence[Callable]
     initialization: Sequence[Callable]
     embed: bool = False
+    polar: bool = False
 
     @nn.compact
     def __call__(self, input, transform = None):
@@ -100,29 +138,38 @@ class ModifiedMLP(nn.Module):
         else:
             x = input
         
+        if self.polar:
+            r = jnp.linalg.norm(x, axis=-1)
+            theta = jnp.arctan2(x[1], x[0])
+            x = jnp.concatenate((x, jnp.array([r, jnp.cos(2*theta)])))
+        
         if self.embed:
             x = FourierEmbedding(1.0, 128)(x)
         
-        u = nn.Dense(features=self.hidden_dims[0],
+        u = FactDense(features=self.hidden_dims[0],
                      kernel_init=self.initialization[0](),
-                     name=f"{self.name}_u")(x)
-        v = nn.Dense(features=self.hidden_dims[0],
+                     name=f"{self.name}_u",
+                         reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
+        v = FactDense(features=self.hidden_dims[0],
                      kernel_init=self.initialization[0](),
-                     name=f"{self.name}_v")(x)
+                     name=f"{self.name}_v",
+                         reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
         
         u = self.activation[0](u)
         v = self.activation[0](v)
 
         for i, feats in enumerate(self.hidden_dims):
-            x = nn.Dense(features=feats,
+            x = FactDense(features=feats,
                          kernel_init=self.initialization[i](),
-                         name=f"{self.name}_linear{i}")(x)
+                         name=f"{self.name}_linear{i}",
+                         reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
             x = self.activation[i](x)
             x = x*u  + (1-x)*v
         
-        x = nn.Dense(features=self.output_dim,
+        x = FactDense(features=self.output_dim,
                      kernel_init=self.initialization[-1](),
-                     name=f"{self.name}_linear_output")(x)
+                     name=f"{self.name}_linear_output",
+                     reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
         
         return x
 
@@ -234,6 +281,47 @@ class ResNetBlock(nn.Module):
         return s
 
 
+class AiryNet(nn.Module):
+    input_dim: int = 2
+    param_scale: float = 1.0
+    
+    @nn.compact
+    def __call__(self, xy: jax.Array):
+        
+        rt = xy2rtheta(xy)
+
+        cos_2t = jnp.cos(2*rt[1])
+        sin_2t = jnp.sin(2*rt[1])
+
+        r1 = rt[0]
+        r2 = jnp.square(r1)
+        r3 = jnp.multiply(r1, r2)
+        r4 = jnp.square(r2)
+        rinv1 = jnp.reciprocal(r1)
+        rinv2 = jnp.reciprocal(r2)
+        rinv3 = jnp.reciprocal(r3)
+        rinv4 = jnp.reciprocal(r4)
+        log_r = jnp.log(r1)
+        rlog_r = jnp.multiply(log_r, r1)
+        r2log_r = jnp.multiply(rlog_r, r1)
+
+        # p = self.param(
+        #     "coeff", nn.initializers.normal(self.param_scale), (12,)
+        # )
+        
+        # u_r = jnp.dot(p[:-1], jnp.array([r1, r2, r3, r4, rinv1, rinv2, rinv3, rinv4, log_r, rlog_r, r2log_r]))
+        # u_t = jnp.add(cos_2t, p[-1])
+        # return jnp.multiply(u_r, u_t)
+        p = self.param(
+            "coeff", nn.initializers.normal(self.param_scale), (33,)
+        )
+
+        rbasis = jnp.array([r1, r2, r3, r4, rinv1, rinv2, rinv3, rinv4, log_r, r2log_r, 1.])
+        tbasis = jnp.array([cos_2t, sin_2t, 1.])
+        ubasis = jnp.kron(rbasis, tbasis)
+        return jnp.dot(p, ubasis)
+
+
 class FourierEmbedding(nn.Module):
     # Source: https://github.com/PredictiveIntelligenceLab/jaxpi/blob/main/jaxpi/archs.py
     embed_scale: float
@@ -244,11 +332,31 @@ class FourierEmbedding(nn.Module):
         kernel = self.param(
             "kernel", nn.initializers.normal(self.embed_scale), (x.shape[-1], self.embed_dim // 2)
         )
-        # y = jnp.concatenate(
-        #     [jnp.cos(jnp.dot(x, kernel)), jnp.sin(jnp.dot(x, kernel))], axis=-1
-        # )
-        y = jnp.cos(jnp.dot(x, kernel))
+        y = jnp.concatenate(
+            [jnp.cos(jnp.dot(x, kernel)), jnp.sin(jnp.dot(x, kernel))], axis=-1
+        )
+        # y = jnp.cos(jnp.dot(x, kernel))
         return y
+
+
+class DualMLP(nn.Module):
+    name: str
+    input_dim: int
+    output_dim: int
+    hidden_dims: Sequence[int]
+    activation: Sequence[Callable]
+    initialization: Sequence[Callable]
+
+    @nn.compact
+    def __call__(self, xy):
+        rt = xy2rtheta(xy)
+        cos_2t = jnp.cos(2*rt[1])
+        rcos2t = jnp.array([rt[0], cos_2t])
+        sym = MLP(name="sym_mlp", input_dim=1, output_dim=1, hidden_dims=self.hidden_dims,
+                  activation=self.activation, initialization=self.initialization)(rt[0].reshape((1,)))
+        nonsym = MLP(name="nonsym_mlp", input_dim=2, output_dim=1, hidden_dims=self.hidden_dims,
+                     activation=self.activation, initialization=self.initialization)(rcos2t)
+        return jnp.add(sym, nonsym)
 
 
 def netmap(model: Callable[..., jax.Array], **kwargs) -> Callable[..., jax.Array]:
@@ -256,6 +364,13 @@ def netmap(model: Callable[..., jax.Array], **kwargs) -> Callable[..., jax.Array
     Applies the jax.vmap function with in_axes=(None, 0).
     """
     return jax.vmap(model, in_axes=(None, 0), **kwargs)
+
+
+def deeponetmap(model: Callable[..., jax.Array], **kwargs) -> Callable[..., jax.Array]:
+    """
+    Applies the jax.vmap function with in_axes=(None, None, 0).
+    """
+    return jax.vmap(model, in_axes=(None, None, 0), **kwargs)
 
 
 def setup_network(network_settings: dict[str, str | dict]) -> MLP | ResNetBlock:
@@ -266,6 +381,7 @@ def setup_network(network_settings: dict[str, str | dict]) -> MLP | ResNetBlock:
     arch = network_settings["architecture"].lower()
     
     match arch:
+        
         case "mlp":
             parsed_settings = parse_MLP_settings(network_settings["specifications"])
             return MLP(**parsed_settings)
@@ -277,6 +393,26 @@ def setup_network(network_settings: dict[str, str | dict]) -> MLP | ResNetBlock:
         case "resnet":
             parsed_settings = parse_ResNetBlock_settings(network_settings["specifications"])
             return ResNetBlock(**parsed_settings)
+        
+        case "airynet":
+            return AiryNet(name="airy")
+        
+        case "dualmlp":
+            parsed_settings = parse_MLP_settings(network_settings["specifications"])
+            return DualMLP(**parsed_settings)
 
         case _:
             raise ValueError(f"Invalid network architecture: '{arch}'.")
+        
+
+def _weight_fact(init_fn, mean, stddev):
+    # Source: https://github.com/PredictiveIntelligenceLab/jaxpi/blob/main/jaxpi/archs.py
+    def init(key, shape):
+        key1, key2 = jax.random.split(key)
+        w = init_fn(key1, shape)
+        g = mean + nn.initializers.normal(stddev)(key2, (shape[-1],))
+        g = jnp.exp(g)
+        v = w / g
+        return g, v
+
+    return init

@@ -45,7 +45,7 @@ def softmax(input: jax.Array,
     return exp_of_input / jnp.sum(exp_of_input + DefaultSettings.SOFTMAX_TOLERANCE)
 
 
-def softadapt(sett: SoftAdaptSettings) -> Callable[..., Callable]:
+def softadapt_old(sett: SoftAdaptSettings) -> Callable[..., Callable]:
     """
     Function implementing the SoftAdapt algorithm.
     RETURNS a DECORATOR for the function calculating
@@ -115,6 +115,38 @@ def softadapt(sett: SoftAdaptSettings) -> Callable[..., Callable]:
         return wrapper
     return softadapt_decorator
 
+def softadapt(sett: SoftAdaptSettings,
+              prevlosses = None,
+              fdm_coeff = None
+              ) -> jax.Array:
+
+    if prevlosses is None:
+        return None
+    
+    if fdm_coeff is None:
+        fdm_coeff = get_fdm_coeff(sett.order, backward=True)
+    
+    # Calculate loss slopes using finite difference
+    rates_of_change = jnp.matmul(fdm_coeff, prevlosses)
+    
+    # Normalize slopes
+    if sett.normalized_rates:
+        rates_of_change = jnp.divide(rates_of_change, jnp.sum(jnp.abs(rates_of_change)))
+    elif sett.delta_time is not None:
+        rates_of_change = jnp.divide(rates_of_change, sett.delta_time)
+
+    # Call custom SoftMax function
+    weights = jnp.clip(softmax(rates_of_change, beta=sett.beta, shift_by_max_value=sett.shift_by_max_val), 0.01, 100)
+
+    # Weight by loss values
+    if sett.loss_weighted:
+        avg_weights = jnp.multiply(jnp.mean(prevlosses, axis=0), weights)
+        weights = jnp.divide(avg_weights, jnp.sum(avg_weights))
+    
+    if sett.normalized:
+        weights = jnp.divide(weights, jnp.sum(weights))
+
+    return jax.lax.stop_gradient(weights)
 
 
 # def compute_rates_of_change(input: jnp.ndarray, order: int = 6):

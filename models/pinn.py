@@ -72,7 +72,7 @@ class PINN(Model):
         
         # Initialize network parameters
         self._key, *net_keys = jax.random.split(self._key, num_nets+1)
-        params = [net.init(net_keys[i], jnp.ones((1, net.input_dim))) for i, net in enumerate(self.net)]
+        params = [net.init(net_keys[i], jnp.ones((net.input_dim,))) for i, net in enumerate(self.net)]
         self.params = {"net"+str(i): par for i, par in enumerate(params)}
 
         # Set optimizer if relevant

@@ -1,3 +1,5 @@
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 
@@ -37,32 +39,21 @@ def maxabse(u: jax.Array, u_true: jax.Array | None = None):
     return jnp.max(jnp.abs(jnp.subtract(u.ravel(), u_true.ravel())))
 
 
-# def get_loss(loss_terms: list[Callable], loss_type: str = "mse"):
-#     """
-#     INPUTS:
-#         loss_terms: List of the loss_terms (callables)
+def L2rel(u: jax.Array, u_true: jax.Array):
+    return jnp.sqrt(jnp.divide(mse(u, u_true), ms(u_true)))
 
-#         loss_type: Type of outer loss (default: MSE), such that:
 
-#             loss_fn(params, batch) = outer_loss(fun1(params, input1), output1) + outer_loss(fun2(params, input2), output2)) + ...
-    
-#     OUTPUTS:
-#         loss_fn: A function returning the total loss, when given params and batch
-#     """
+def _norme(u: jax.Array, u_true: jax.Array | None = None, order = 2):
+    if u_true is None:
+        return jnp.linalg.norm(u, ord = order)
+    return jnp.linalg.norm(jnp.subtract(u.ravel(), u_true.ravel()), ord = order)
 
-#     # Get outer loss type (default: MSE)
-#     outer_loss = parse_loss_type(loss_type)
+def pnorm(order = 2):
+    return jax.jit(partial(_norme, order=order))
 
-#     # Define specific loss function to return
-#     def loss_fn(params, batch: list[tuple[jnp.ndarray, jnp.ndarray]]):
-
-#         total_loss = 0
-
-#         # Run through loss terms
-#         for i, loss in enumerate(loss_terms):
-#             inputs, outputs = batch[i]
-#             total_loss += outer_loss(loss(params, inputs), outputs)
-        
-#         return total_loss
-
-#     return loss_fn
+def running_average(new_weights: jax.Array, old_weights: jax.Array, alpha: float | jax.Array, normalized: bool = False):
+    alpha = jnp.clip(alpha, min=0, max=1)
+    avg_weights = alpha*new_weights + (1-alpha)*old_weights
+    if normalized:
+        return avg_weights / jnp.sum(avg_weights)
+    return avg_weights

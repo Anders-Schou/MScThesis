@@ -58,3 +58,14 @@ def timer(func):
         print(f"Time for function '{func.__name__}': {t2-t1:.6f} seconds")
         return v
     return wrapper
+
+
+def find_first_integer(s: str):
+    for i, c in enumerate(s):
+        if c.isdigit():
+            start = i
+            while i < len(s) and s[i].isdigit():
+                i += 1
+            break
+        
+    return int(s[start:i])

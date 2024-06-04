@@ -13,7 +13,6 @@ from .loss import (
     loss_circ_rr_rt,
     loss_dirichlet
 )
-from .pinn_old import PWHPINN
 from .pinn import PlateWithHolePINN
 from .plotting import (
     plot_loss,

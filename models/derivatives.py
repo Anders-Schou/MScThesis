@@ -17,13 +17,13 @@ def hessian(model: Callable, argnums=1) -> Callable:
 
 def laplacian(model: Callable, axis1=-2, axis2=-1, argnums=1) -> Callable:
     hess = jax.hessian(model, argnums=argnums)
-    tr = lambda p, xx: jnp.trace(hess(p, xx).reshape(2, 2), axis1=axis1, axis2=axis2)
+    tr = lambda *args: jnp.trace(hess(*args).reshape(2, 2), axis1=axis1, axis2=axis2)
     return tr
 
 
-def biharmonic(model: Callable, axis1=-2, axis2=-1) -> Callable:
-    lap = laplacian(model, axis1=axis1, axis2=axis2)
-    lap2 = laplacian(lap, axis1=axis1, axis2=axis2)
+def biharmonic(model: Callable, axis1=-2, axis2=-1, argnums=1) -> Callable:
+    lap = laplacian(model, axis1=axis1, axis2=axis2, argnums=argnums)
+    lap2 = laplacian(lap, axis1=axis1, axis2=axis2, argnums=argnums)
     return lap2
 
 

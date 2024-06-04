@@ -19,7 +19,7 @@ from setup.settings import (
     PlottingSettings,
     DirectorySettings,
     SoftAdaptSettings,
-    RunningAverageSettings,
+    GradNormSettings,
     WeightedSettings,
     UnweightedSettings,
     SupportedActivations,
@@ -30,6 +30,14 @@ from setup.settings import (
     SettingsNotSupportedError,
     settings2dict
 )
+
+from models.loss import (
+    mse,
+    maxabse,
+    mae,
+    pnorm
+)
+from utils.utils import find_first_integer
 
 
 def load_json(path: str) -> dict:
@@ -182,6 +190,11 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     else:
         settings.initialization = [settings.initialization] * (num_hidden+1)
 
+    # Fourier embedding
+    if settings_dict.get("embed") is not None:
+        check_pos_int(settings_dict["embed"], "embed")
+        settings.embed = settings_dict["embed"]
+
     return settings2dict(settings)
 
 
@@ -305,7 +318,7 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     settings_dict = settings_dict.copy()
 
     # Get default settings (provide only required argument(s))
-    settings = TrainingSettings(settings_dict["sampling"])
+    settings = TrainingSettings(sampling=settings_dict["sampling"])
 
     # iterations
     if settings_dict.get("iterations") is not None:
@@ -319,47 +332,31 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     # update_scheme
     if settings_dict.get("update_scheme") is not None:
         settings.update_scheme = settings_dict["update_scheme"].lower()
-        
-    # update_scheme
-    if settings_dict.get("update_weights_every") is not None:
-        settings.update_weights_every = settings_dict["update_weights_every"]
-    
-    # update_kwargs
-    if settings_dict.get("update_kwargs") is not None:
-        settings.update_kwargs = {}
 
-        if settings.update_scheme == "softadapt":
-            try:
-                settings.update_kwargs["softadapt"] = settings2dict(
-                    SoftAdaptSettings(**settings_dict["update_kwargs"]["softadapt"])
-                )
-            except KeyError:
-                settings.update_kwargs["softadapt"] = settings2dict(SoftAdaptSettings())
-                
-        elif settings.update_scheme == "running_average":
-            try:
-                settings.update_kwargs["running_average"] = settings2dict(
-                    RunningAverageSettings(**settings_dict["update_kwargs"]["running_average"])
-                )
-            except KeyError:
-                settings.update_kwargs["running_average"] = settings2dict(RunningAverageSettings())
-        
-        elif settings.update_scheme == "weighted":
-            try:
-                settings.update_kwargs["weighted"] = settings2dict(
-                    WeightedSettings(**settings_dict["update_kwargs"]["weighted"])
-                )
-            except (KeyError, TypeError) as e:
-                raise KeyError("Using the weighted update requires a settings dict "
-                               "with the field 'weights'.") from e
-        
-        else:
-            try:
-                settings.update_kwargs["unweighted"] = settings2dict(
-                    UnweightedSettings(**settings_dict["update_kwargs"]["unweighted"])
-                )
-            except KeyError:
-                settings.update_kwargs["unweighted"] = settings2dict(UnweightedSettings())
+    match settings.update_scheme:
+        case "softadapt":
+            SettingsClass = SoftAdaptSettings
+        case "gradnorm":
+            SettingsClass = GradNormSettings
+        case "weighted":
+            SettingsClass = WeightedSettings
+        case "unweighted":
+            SettingsClass = UnweightedSettings
+        case _:
+            raise SettingsInterpretationError(f"Unknown update scheme: '{settings.update_scheme}'.")
+    
+    try:
+        # update_kwargs
+        if settings_dict.get("update_kwargs") is None:
+            settings_dict["update_kwargs"] = {settings.update_scheme: None}
+        settings.update_settings = SettingsClass(**settings_dict["update_kwargs"][settings.update_scheme])
+    except KeyError as k:
+        raise SettingsInterpretationError(f"Cannot interpret update scheme settings.") from k
+    except TypeError as t:
+        raise SettingsInterpretationError(f"Invalid update kwarg(s): {settings.update_kwargs}.") from t
+    
+    # Keep update kwargs in dict    
+    settings.update_kwargs = settings2dict(settings.update_settings)
     
     # learning_rate
     if settings_dict.get("learning_rate") is not None:
@@ -417,6 +414,26 @@ def parse_evaluation_settings(settings_dict: dict) -> EvaluationSettings:
         settings.transfer_learning = settings_dict["transfer_learning"]
 
     return settings
+
+
+def parse_loss_settings(loss_str: str) -> Callable:
+    """
+    Parses loss function
+    """
+    
+    match loss_str.lower():
+        case "mse":
+            return mse
+        case "mae":
+            return mae
+        case "maxabse":
+            return maxabse
+        case s if s[0].isdigit():
+            return pnorm(find_first_integer(s)) 
+        case _ :
+            raise ValueError("Unrecognized loss_fn") 
+    
+    return
 
 
 def parse_directory_settings(settings_dict: dict,

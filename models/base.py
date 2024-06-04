@@ -15,17 +15,19 @@ from setup.settings import (
     SoftAdaptSettings,
     WeightedSettings,
     UnweightedSettings,
-    RunningAverageSettings
+    GradNormSettings,
+    AdaptiveWeightSchemeSettings
 )
 from setup.parsers import (
     parse_verbosity_settings,
     parse_logging_settings,
     parse_plotting_settings,
     parse_directory_settings,
-    parse_run_settings
+    parse_run_settings,
+    parse_loss_settings
 )
 from .optim import get_update
-from .loss import softadapt, weighted, unweighted, running_average, compute_losses
+from .loss import softadapt, gradnorm, running_average
 from utils.plotting import save_fig
 
 
@@ -68,6 +70,8 @@ class Model(metaclass=ABCMeta):
                 print(f"No ID specified in settings. ID is set to '{DefaultSettings.ID}'.")
             self._id = DefaultSettings.ID
         
+        self._static_loss_args = ()
+        
         # Set a key for use in other methods
         # Important: Remember to return a new _key as well, e.g.:
         #   self._key, key_for_some_task = jax.random.split(self._key)
@@ -76,6 +80,7 @@ class Model(metaclass=ABCMeta):
         # Parse more settings
         self._parse_directory_settings(settings["io"], self._id)
         self._parse_run_settings(settings["run"])
+        self._prase_loss_settings(settings["run"]["train"].get("loss_fn"))
         self._parse_plotting_settings(settings["plotting"])
         self._parse_logging_settings(settings["logging"])
         
@@ -105,6 +110,12 @@ class Model(metaclass=ABCMeta):
         self.eval_settings, self.do_eval = parse_run_settings(run_settings, run_type="eval")
         return
     
+    def _prase_loss_settings(self, loss_settings: str | None = None):
+        if loss_settings is None:
+            loss_settings = "mse"
+        self.loss_fn = parse_loss_settings(loss_settings)
+        return
+    
     def _parse_plotting_settings(self, plot_settings: dict) -> None:
         """
         Parse settings related to plotting.
@@ -120,6 +131,15 @@ class Model(metaclass=ABCMeta):
     def _parse_logging_settings(self, log_settings: dict) -> None:
         self.logging = parse_logging_settings(log_settings)
         return
+
+    def _gen_key(self, n: int = 1):
+        if n < 1:
+            n = 1
+        if n == 1:
+            self._key, key = jax.random.split(self._key, 2)
+            return key
+        self._key, *keys = jax.random.split(self._key, n+1)
+        return keys
 
     @abstractmethod
     def init_model(self) -> None:
@@ -158,24 +178,41 @@ class Model(metaclass=ABCMeta):
         """
         pass
 
-    def _total_loss(self, *args, **kwargs):
+    def _total_loss(self, *args, weights: jax.Array | None = None, **kwargs):
         """
         This function sums up the loss terms return in the loss_terms
         method and passes through the auxillary output.
         """
-        
-        wloss, *aux = self._loss_terms(*args, **kwargs)
-        return jnp.sum(wloss), tuple(aux)
+        loss_terms = self._loss_terms(*args, **kwargs)
+        if weights is None:
+            loss = jnp.sum(loss_terms)
+        else:
+            loss = jnp.dot(weights, loss_terms)
+        return loss, loss_terms
+    
+    def _register_static_loss_arg(self, arg: str):
+        if arg not in self._static_loss_args:
+            self._static_loss_args = self._static_loss_args + (arg,)
+        return
+    
+    def _unregister_static_loss_arg(self, arg: str):
+        self._static_loss_args = tuple(a for a in self._static_loss_args if a != arg)
+        return
     
     def _set_loss(self,
                   loss_term_fun_name: str) -> None:
         """
         (Stateful) method for setting loss function.
         """
-
-        # Get default ("unweighted") update function
-        fun = getattr(self, loss_term_fun_name)
         
+        try:
+            fun = getattr(self, loss_term_fun_name)
+        except AttributeError as attr_err:
+            raise RuntimeError(f"No loss term method with name '{loss_term_fun_name}'.") from attr_err
+
+        self._loss_terms = fun
+        return
+
         # # Check if SoftAdapt should be used
         # if self.train_settings.update_scheme == "softadapt":
         #     self._loss_terms = softadapt(SoftAdaptSettings(
@@ -190,12 +227,13 @@ class Model(metaclass=ABCMeta):
         #     self._loss_terms = unweighted(UnweightedSettings(
         #         **self.train_settings.update_kwargs["unweighted"]))(fun)
         
-        if self.train_settings.update_scheme == "softadapt":
-            self._loss_terms = compute_losses(SoftAdaptSettings(
-                **self.train_settings.update_kwargs["softadapt"]))(fun)
-        else:
-            self._loss_terms = compute_losses()(fun)
-        return
+        # if self.train_settings.update_scheme == "softadapt":
+        #     self._loss_terms = compute_losses(SoftAdaptSettings(
+        #         **self.train_settings.update_kwargs["softadapt"]))(fun)
+        # else:
+        #     self._loss_terms = compute_losses()(fun)
+        # return
+
     
     def _init_prevlosses(self,
                          loss_term_fun: Callable[..., jax.Array],
@@ -240,12 +278,43 @@ class Model(metaclass=ABCMeta):
             self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
         return
     
-    def get_weights(self,
+    def init_weights(self,
                     loss_term_fun: Callable[..., jax.Array],
-                    update_key: int | None = None,
-                    type: str | None = None,
-                    epoch: int = 0,
-                    update_weights_every: int = 1
+                    *args,
+                    **kwargs
+                    ) -> None:
+        
+        if not self._initialized():
+            raise ModelNotInitializedError("The model has not been initialized properly.")
+        
+        loss_shape = loss_term_fun.eval_shape(*args, **kwargs).shape[0]
+        
+        # if not isinstance(self.train_settings.update_settings, AdaptiveWeightSchemeSettings):
+        if self.train_settings.update_scheme == "weighted":
+            
+            curr_weights = self.train_settings.update_kwargs["weights"]
+            if loss_shape > len(curr_weights):
+                self.weights = jnp.concatenate([jnp.array(curr_weights), jnp.ones((loss_shape - len(curr_weights),))])
+            else:
+                self.weights = jnp.array(curr_weights[:loss_shape])
+        else:
+            self.weights = jnp.ones((loss_shape))
+        
+        if self.train_settings.update_settings.normalized:
+            self.weights = self.weights / jnp.sum(self.weights)
+        
+        if self.train_settings.update_scheme == "softadapt":
+            # Initialize previous losses
+            self._prevlosses = loss_term_fun(*args, **kwargs).reshape(1, -1)
+        return
+            
+    
+
+    def get_weights(self,
+                    epoch: int,
+                    loss_term_fun: Callable[..., jax.Array],
+                    *args,
+                    **kwargs
                     ) -> None:
         """
         Method for initializing array of weights.
@@ -257,36 +326,52 @@ class Model(metaclass=ABCMeta):
             raise ModelNotInitializedError("The model has not been initialized properly.")
         
         if not hasattr(self, "weights"):
-            # Calculate initial loss
-            init_loss = loss_term_fun(self.params, self.train_points, 
-                                    true_val=self.train_true_val, update_key=update_key)
-            
-            if len(init_loss.shape) == 0:
-                loss_shape = 1
-            else:
-                loss_shape = init_loss.shape[0]
+            self.init_weights(loss_term_fun, *args, **kwargs)
+            # raise AttributeError(f"Model {self.__class__} has no loss term weights.")
+            return
 
-            # Check which loss to use
-            if self.train_settings.update_scheme == "weighted":
-                if self.weights is None:
-                    curr_weights = self.train_settings.update_kwargs["weighted"]["weights"]
-                    if loss_shape > len(curr_weights):
-                        self.weights = jnp.concatenate([jnp.array(curr_weights), jnp.ones((loss_shape - len(curr_weights),))])
-                else:
-                    self.weights = self.weights
-            else:
-                self.weights = jnp.ones((loss_shape))
-            
-        if (epoch % update_weights_every) == update_weights_every-1:
-            if type.lower() == "softadapt":
-                _, self.prevlosses, self.weights = softadapt(SoftAdaptSettings(**self.train_settings.update_kwargs["softadapt"]))(loss_term_fun)(self.params, self.train_points, 
-                                                                                                                                    true_val=self.train_true_val, update_key=update_key,
-                                                                                                                                    prevlosses=self.prevlosses)
-            elif type.lower() == "running_average":
-                _, _, self.weights = running_average(RunningAverageSettings(**self.train_settings.update_kwargs["running_average"]))(loss_term_fun)(self.params, self.train_points, 
-                                                                                                                                true_val=self.train_true_val, update_key=update_key,
-                                                                                                                                weights=self.weights, prevlosses=self.prevlosses)
+        # Weights are not changed from initial state if the scheme is not adaptive
+        if not isinstance(self.train_settings.update_settings, AdaptiveWeightSchemeSettings):
+            return
+
+        # Skip specified number of steps before updating weights
+        if (epoch % self.train_settings.update_settings.update_every):
+            return
         
+        if self.train_settings.update_scheme == "softadapt":
+            # Compute loss
+            curr_loss = loss_term_fun(*args, **kwargs)
+
+            # Not enough previous losses registered - use default weights, but register losses for next time
+            if self._prevlosses.shape[0] <= self.train_settings.update_settings.order:
+                self._prevlosses = jnp.concatenate((self._prevlosses, curr_loss.reshape(1, -1)), axis=0)
+                return
+            
+            # Push oldest losses out
+            self._prevlosses = jnp.roll(self._prevlosses, -1, axis=0).at[-1, :].set(curr_loss)
+
+            # Calculate weights
+            new_weights = softadapt(self.train_settings.update_settings, self._prevlosses, fdm_coeff=None)
+
+        else: # grad_norm
+            # Compute loss
+            curr_loss = loss_term_fun(*args, **kwargs)
+
+            # Prevent gradient tracking through the weights
+            detached_params = jax.lax.stop_gradient(args[0])
+            detached_grads = jax.jacrev(loss_term_fun)(detached_params, *args[1:], **kwargs)
+            # detached_grads = jax.jacrev(loss_term_fun)(*args, **kwargs)
+            new_weights = gradnorm(self.train_settings.update_settings, detached_grads, self.weights.shape[0], loss_weights=curr_loss)
+        
+        if self.train_settings.update_settings.running_average is not None:
+            self.weights = running_average(new_weights, self.weights,
+                                           alpha=self.train_settings.update_settings.running_average,
+                                           normalized=self.train_settings.update_settings.normalized)
+            if self.train_settings.update_settings.normalized:
+                self.weights = self.weights / jnp.sum(self.weights)
+        else:
+            self.weights = new_weights
+
         return
 
     def _set_update(self,
@@ -312,7 +397,8 @@ class Model(metaclass=ABCMeta):
                                  optimizer,
                                  self.train_settings.jitted_update,
                                  verbose=self._verbose.training,
-                                 verbose_kwargs={"print_every": self.logging.print_every})
+                                 verbose_kwargs={"print_every": self.logging.print_every},
+                                 static_argnames=self._static_loss_args)
         return
     
     def _initialized(self) -> bool:

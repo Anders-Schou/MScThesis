@@ -3,10 +3,12 @@ from typing import override
 from functools import partial
 
 import jax
+import jax.numpy as jnp
 
 from datahandlers.generators import (
     generate_rectangle_with_hole,
     generate_collocation_points_with_hole,
+    generate_extra_points,
     resample,
     resample_idx
 )
@@ -68,6 +70,7 @@ class PlateWithHolePINN(PINN):
 
     def __init__(self, settings: dict, *args, **kwargs):
         super().__init__(settings, *args, **kwargs)
+        self._register_static_loss_arg("update_key")
         self.forward_input_coords = "cartesian"
         self.forward_output_coords = "cartesian"
         return
@@ -143,7 +146,7 @@ class PlateWithHolePINN(PINN):
         out3 = netmap(self.hessian)(params, input[3]).reshape(-1, 4) # vertical left
 
         # Compute losses for all four sides of rectangle
-        losses  = pwhloss.loss_rect(out0, out1, out2, out3, true_val=true_val)
+        losses  = pwhloss.loss_rect(out0, out1, out2, out3, true_val=true_val, loss_fn=self.loss_fn)
         return losses
 
     def loss_circ(self, params, input: jax.Array, true_val: dict[str, jax.Array] | None = None):
@@ -155,7 +158,19 @@ class PlateWithHolePINN(PINN):
         output = netmap(self.hessian)(params, input).reshape(-1, 4)
 
         # Compute polar stresses and return loss
-        losses = pwhloss.loss_circ_rr_rt(input, output, true_val=true_val)
+        losses = pwhloss.loss_circ_rr_rt(input, output, true_val=true_val, loss_fn=self.loss_fn)
+        return losses
+    
+    def loss_circ_extra(self, params, input: jax.Array, true_val: dict[str, jax.Array] | None = None):
+        """
+        Extra loss on the circle for the theta-theta stress.
+        """
+
+        # Compute cartesian output
+        output = netmap(self.hessian)(params, input).reshape(-1, 4)
+        
+        # Compute polar stresses and return loss
+        losses = pwhloss.loss_circ_tt(input, output, true_val=true_val, loss_fn=self.loss_fn)
         return losses
 
     def loss_diri(self, params, input: tuple[jax.Array], true_val: dict[str, jax.Array] | None = None):
@@ -167,7 +182,7 @@ class PlateWithHolePINN(PINN):
         out3 = netmap(self.forward)(params, input[3])
 
         # Compute losses for all four sides of rectangle
-        losses  = pwhloss.loss_dirichlet(out0, out1, out2, out3, true_val=true_val)
+        losses  = pwhloss.loss_dirichlet(out0, out1, out2, out3, true_val=true_val, loss_fn=self.loss_fn)
         return losses
     
     def loss_data(self, params, input: jax.Array, true_val: dict[str, jax.Array] | None = None):
@@ -176,7 +191,7 @@ class PlateWithHolePINN(PINN):
         out = netmap(self.hessian)(params, input).reshape(-1, 4)
 
         # Compute losses
-        losses = pwhloss.loss_data(out, true_val=true_val)
+        losses = pwhloss.loss_data(out, true_val=true_val, loss_fn=self.loss_fn)
         return losses
     
     def loss_rect_extra(self, params, input: tuple[jax.Array], true_val: dict[str, jax.Array] | None = None):
@@ -187,7 +202,7 @@ class PlateWithHolePINN(PINN):
         out3 = netmap(self.hessian)(params, input[3]).reshape(-1, 4) # vertical left
 
         # Compute losses for all four sides of rectangle
-        losses  = pwhloss.loss_rect_extra(out0, out1, out2, out3, true_val=true_val)
+        losses  = pwhloss.loss_rect_extra(out0, out1, out2, out3, true_val=true_val, loss_fn=self.loss_fn)
         return losses
 
     def sample_points(self):
@@ -199,30 +214,129 @@ class PlateWithHolePINN(PINN):
         radius = self.geometry_settings["domain"]["circle"]["radius"]
         xlim = self.geometry_settings["domain"]["rectangle"]["xlim"]
         ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
+        dt = self.geometry_settings["domain"]["type"]
         train_sampling = self.train_settings.sampling if self.do_train is not None else None
         eval_sampling = self.eval_settings.sampling if self.do_eval is not None else None
-        
+        self.define_plot_geometry()
+
         # Sampling points in domain and on boundaries
         self.train_points = generate_rectangle_with_hole(train_key, radius, xlim, ylim,
-                                                         train_sampling["coll"],
-                                                         train_sampling["rect"],
-                                                         train_sampling["circ"])
+                                                        train_sampling["coll"],
+                                                        train_sampling["rect"],
+                                                        train_sampling["circ"],
+                                                        domain_type=dt)
         self.eval_points = generate_rectangle_with_hole(eval_key, radius, xlim, ylim,
                                                         eval_sampling["coll"],
                                                         eval_sampling["rect"],
-                                                        eval_sampling["circ"])
+                                                        eval_sampling["circ"],
+                                                        domain_type=dt)
         
-        # Generate data points
+        # Keys for data points
         self._key, data_train_key, data_eval_key = jax.random.split(self._key, 3)
         self.train_points["data"] = generate_collocation_points_with_hole(data_train_key, radius,
-                                                                          xlim, ylim, train_sampling.get("data"))
+                                                                          xlim, ylim, train_sampling.get("data"),
+                                                                          domain_type=dt)
         self.eval_points["data"] = generate_collocation_points_with_hole(data_eval_key, radius,
-                                                                         xlim, ylim, eval_sampling.get("data"))
+                                                                         xlim, ylim, eval_sampling.get("data"),
+                                                                         domain_type=dt)
 
         # Get corresponding function values
         self.train_true_val = analytic.get_true_vals(self.train_points, ylim=ylim)
         self.eval_true_val = analytic.get_true_vals(self.eval_points, ylim=ylim)
+
+
+        if train_sampling.get("separate_coll"):
+
+            # Find splitting point (number of standard samples vs. extra samples)
+            train_coll_points = c[0] if isinstance(c:=train_sampling["coll"], list) else c
+            train_data_points = c[0] if isinstance(c:=train_sampling["data"], list) else c
+
+            # Split into seperate dictionary entries
+            self.train_points["coll_extra"] = self.train_points["coll"][ train_coll_points:]
+            self.train_points["coll"]       = self.train_points["coll"][:train_coll_points ]
+            # self.train_points["data_extra"] = self.train_points["data"][:,  train_data_points:]
+            # self.train_points["data"]       = self.train_points["data"][:, :train_data_points ]
+
+            # Split into seperate dictionary entries
+            self.train_true_val["coll_extra"] = None if (c:=self.train_true_val["coll"]) is None else c[ train_coll_points:]
+            self.train_true_val["coll"]       = None if (c:=self.train_true_val["coll"]) is None else c[:train_coll_points ]
+            # self.train_true_val["data_extra"] = None if (c:=self.train_true_val["data"]) is None else c[:,  train_data_points:]
+            # self.train_true_val["data"]       = None if (c:=self.train_true_val["data"]) is None else c[:, :train_data_points ]
+            
+
+        if eval_sampling.get("separate_coll"):
+            
+            # Find splitting point (number of standard samples vs. extra samples)
+            eval_coll_points  = c[0] if isinstance(c:=eval_sampling["coll"], list) else c
+            eval_data_points  = c[0] if isinstance(c:=eval_sampling["data"], list) else c
+
+            # Split into seperate dictionary entries
+            self.eval_points["coll_extra"] = self.eval_points["coll"][ eval_coll_points:]
+            self.eval_points["coll"]       = self.eval_points["coll"][:eval_coll_points ]
+            # self.eval_points["data_extra"] = self.eval_points["data"][:,  eval_data_points:]
+            # self.eval_points["data"]       = self.eval_points["data"][:, :eval_data_points ]
+
+            # Split into seperate dictionary entries
+            self.eval_true_val["coll_extra"] = None if (c:=self.eval_true_val["coll"]) is None else c[ eval_coll_points:]
+            self.eval_true_val["coll"]       = None if (c:=self.eval_true_val["coll"]) is None else c[:eval_coll_points ]
+            # self.eval_true_val["data_extra"] = None if (c:=self.eval_true_val["data"]) is None else c[:,  eval_coll_points:]
+            # self.eval_true_val["data"]       = None if (c:=self.eval_true_val["data"]) is None else c[:, :eval_coll_points ]
+            
+        if self.plot_settings.get("sampling", {"do_plots": False}).get("do_plots"):
+            self.plot_training_points()
         return
+
+    def define_plot_geometry(self):
+        dt = self.geometry_settings["domain"]["type"].lower()
+
+        self.geometry_settings_plotting = self.geometry_settings.copy()
+
+        match dt:
+            case "full":
+                pass
+
+            case "half-upper":
+                self.geometry_settings_plotting["domain"]["rectangle"]["ylim"][0] = 0.0
+                self.geometry_settings_plotting["domain"]["circle"]["angle"] = [0, jnp.pi]
+
+            case "half-lower":
+                self.geometry_settings_plotting["domain"]["rectangle"]["ylim"][1] = 0.0
+                self.geometry_settings_plotting["domain"]["circle"]["angle"] = [jnp.pi, 2*jnp.pi]
+
+            case "half-left":
+                self.geometry_settings_plotting["domain"]["rectangle"]["xlim"][1] = 0.0
+                self.geometry_settings_plotting["domain"]["circle"]["angle"] = [0.5*jnp.pi, 1.5*jnp.pi]
+
+            case "half-right":
+                self.geometry_settings_plotting["domain"]["rectangle"]["xlim"][0] = 0.0
+                self.geometry_settings_plotting["domain"]["circle"]["angle"] = [-0.5*jnp.pi, 0.5*jnp.pi]
+            
+            case "quarter-1":
+                self.geometry_settings_plotting["domain"]["rectangle"]["xlim"][0] = 0.0
+                self.geometry_settings_plotting["domain"]["rectangle"]["ylim"][0] = 0.0
+                self.geometry_settings_plotting["domain"]["circle"]["angle"] = [0, 0.5*jnp.pi]
+            
+            case "quarter-2":
+                self.geometry_settings_plotting["domain"]["rectangle"]["xlim"][1] = 0.0
+                self.geometry_settings_plotting["domain"]["rectangle"]["ylim"][0] = 0.0
+                self.geometry_settings_plotting["domain"]["circle"]["angle"] = [0.5*jnp.pi, jnp.pi]
+
+            case "quarter-3":
+                self.geometry_settings_plotting["domain"]["rectangle"]["xlim"][1] = 0.0
+                self.geometry_settings_plotting["domain"]["rectangle"]["ylim"][1] = 0.0
+                self.geometry_settings_plotting["domain"]["circle"]["angle"] = [jnp.pi, 1.5*jnp.pi]
+            
+            case "quarter-4":
+                self.geometry_settings_plotting["domain"]["rectangle"]["xlim"][0] = 0.0
+                self.geometry_settings_plotting["domain"]["rectangle"]["ylim"][1] = 0.0
+                self.geometry_settings_plotting["domain"]["circle"]["angle"] = [-0.5*jnp.pi, 0]
+            
+            case _:
+                raise ValueError(f"Unknown domain type: '{dt}'.")
+        
+
+        return
+
 
     def resample(self, loss_fun: Callable):
         """
@@ -278,19 +392,19 @@ class PlateWithHolePINN(PINN):
     @timer
     def plot_results(self, save=True, log=False, step=None):
         if not hasattr(self, 'mesh_data'):
-            values = pwhplot.get_plot_data(self.geometry_settings, 
+            values = pwhplot.get_plot_data(self.geometry_settings_plotting, 
                                            self.hessian, self.params, 
                                            grid=self.plot_settings["grid"])
             keys = ["X", "Y", "R", "THETA", "sigma_cart_list", "sigma_cart_true_list", "sigma_polar_list", "sigma_polar_true_list", "plotpoints", "plotpoints2"]
             self.mesh_data = {key: val for key, val in zip(keys, values)}
             
-        pwhplot.plot_results(self.geometry_settings, self.jitted_hessian, self.params, 
+        pwhplot.plot_results(self.geometry_settings_plotting, self.jitted_hessian, self.params, 
                              self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step, 
                              grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"], mesh_data=self.mesh_data)
         
         
     def plot_boundaries(self, save=True, log=False, step=None):
-        pwhplot.plot_boundaries(self.geometry_settings, self.jitted_hessian, self.params, 
+        pwhplot.plot_boundaries(self.geometry_settings_plotting, self.jitted_hessian, self.params, 
                              self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step, 
                              grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"])
         

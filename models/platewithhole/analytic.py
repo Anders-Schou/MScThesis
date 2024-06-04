@@ -9,7 +9,6 @@ _TENSION = 10
 _RADIUS = 2
 
 
-
 def sigma_rr_true(r, theta, S = _TENSION, a = _RADIUS):
     a2 = jnp.array(a*a)
     r2 = jnp.square(r)
@@ -31,24 +30,24 @@ def sigma_rt_true(r, theta, S = _TENSION, a = _RADIUS):
     return -0.5*S * (1 - 3 * jnp.square(a2divr2) + 2 * a2divr2) * jnp.sin(2*theta)
 
 
-def polar_stress_true(rtheta, **kwargs):
+def polar_stress_true(rtheta, S = _TENSION, a = _RADIUS):
 
     # Compute polar stresses from analytical solutions
-    rr_stress = sigma_rr_true(rtheta[0], rtheta[1], **kwargs)
-    rt_stress = sigma_rt_true(rtheta[0], rtheta[1], **kwargs)
-    tt_stress = sigma_tt_true(rtheta[0], rtheta[1], **kwargs)
+    rr_stress = sigma_rr_true(rtheta[0], rtheta[1], S=S, a=a)
+    rt_stress = sigma_rt_true(rtheta[0], rtheta[1], S=S, a=a)
+    tt_stress = sigma_tt_true(rtheta[0], rtheta[1], S=S, a=a)
 
     # Format as stress tensor
     return jnp.array([[rr_stress, rt_stress], [rt_stress, tt_stress]])
 
 
-def cart_stress_true(xy, **kwargs):
+def cart_stress_true(xy, S = _TENSION, a = _RADIUS):
 
     # Map cartesian coordinates to polar coordinates
     rtheta = xy2rtheta(xy)
     
     # Compute true stress tensor in polar coordinates
-    polar_stress_hessian = polar_stress_true(rtheta, **kwargs)
+    polar_stress_hessian = polar_stress_true(rtheta, S=S, a=a)
 
     # Convert polar stress tensor to cartesian stress tensor
     return polar2cart_tensor(polar_stress_hessian, rtheta)
@@ -59,7 +58,10 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
                   exclude: Sequence[str] | None = None,
                   ylim = None,
                   noise: float | None = None,
-                  key = None
+                  key = None,
+                  radius = _RADIUS,
+                  tension = _TENSION,
+                  **kwargs
                   ) -> dict[str, jax.Array | dict[str, jax.Array] | None]:
     vals = {}
     if exclude is None:
@@ -68,17 +70,18 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
     # Homogeneous PDE ==> RHS is zero
     if "coll" not in exclude:
         coll = None
+        # coll = jnp.zeros((points["coll"].shape[0], 1))
         vals["coll"] = coll
 
     # True stresses in domain
     if "data" not in exclude:
-        true_data = jax.vmap(cart_stress_true)(points["data"])
+        true_data = jax.vmap(cart_stress_true, in_axes=(0, None, None))(points["data"], tension, radius)
         vals["data"] = {}
         if noise is None:
             # Exact data
-            vals["data"]["true_xx"] = true_data[:, 0, 0]
-            vals["data"]["true_xy"] = true_data[:, 0, 1]
-            vals["data"]["true_yy"] = true_data[:, 1, 1]
+            vals["data"]["true_sxx"] = true_data[:, 0, 0]
+            vals["data"]["true_sxy"] = true_data[:, 0, 1]
+            vals["data"]["true_syy"] = true_data[:, 1, 1]
         else:
             # Noisy data
             if key is None:
@@ -86,22 +89,19 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
             keys = jax.random.split(key, 3)
 
             xx_noise = jax.random.normal(keys[0], true_data[:, 0, 0].shape)
-            vals["data"]["true_xx"] = true_data[:, 0, 0] + \
+            vals["data"]["true_sxx"] = true_data[:, 0, 0] + \
                 noise * (jnp.linalg.norm(true_data[:, 0, 0]) / jnp.linalg.norm(xx_noise)) * xx_noise
             xy_noise = jax.random.normal(keys[1], true_data[:, 0, 1].shape)
-            vals["data"]["true_xy"] = true_data[:, 0, 1] + \
+            vals["data"]["true_sxy"] = true_data[:, 0, 1] + \
                 noise * (jnp.linalg.norm(true_data[:, 0, 1]) / jnp.linalg.norm(xy_noise)) * xy_noise
             yy_noise = jax.random.normal(keys[2], true_data[:, 1, 1].shape)
-            vals["data"]["true_yy"] = true_data[:, 1, 1] + \
+            vals["data"]["true_syy"] = true_data[:, 1, 1] + \
                 noise * (jnp.linalg.norm(true_data[:, 1, 1]) / jnp.linalg.norm(yy_noise)) * yy_noise
     
     # Only inhomogeneous BCs at two sides of rectangle
     if "rect" not in exclude:
-        # rect_points = [p.shape[0] for p in points["rect"]]
-        # rect = {"yy1": jnp.full((rect_points[1],), _TENSION),
-        #         "yy3": jnp.full((rect_points[3],), _TENSION)}
         
-        true_rect = [jax.vmap(cart_stress_true)(points["rect"][i]) for i in range(4)]
+        true_rect = [jax.vmap(cart_stress_true, in_axes=(0, None, None))(points["rect"][i], tension, radius) for i in range(4)]
 
         rect = {
                 "xx0":  true_rect[0][:, 1, 1],
@@ -123,7 +123,9 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
     
     # Homogeneous BC at inner circle
     if "circ" not in exclude:
-        circ = None
+        polar_points = jax.vmap(xy2rtheta)(points["circ"])
+        true_tt = jax.vmap(sigma_tt_true, in_axes=(0, 0, None, None))(polar_points[:, 0], polar_points[:, 1], tension, radius)
+        circ = {"stt": true_tt}
         vals["circ"] = circ
     
     # If used, constrains the solution to a specific one, namely

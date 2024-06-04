@@ -45,7 +45,8 @@ class Sin1DPINN(PINN):
                    inputs: dict[str, jax.Array],
                    true_val: dict[str, jax.Array],
                    update_key: int | None = None,
-                   loss_fn: Callable | None = None
+                   loss_fn: Callable | None = None,
+                   **kwargs
                    ) -> jax.Array:
         
         if update_key == 0:
@@ -73,6 +74,11 @@ class Sin1DPINN(PINN):
             bcloss2 = self.loss2(params, inputs["bc"], true_val=true_val["bc2"], loss_fn=loss_fn)
             return jnp.array((loss4, bcloss2))
         
+        if update_key == 6:
+            loss4 = self.loss4(params, inputs["coll"], true_val=true_val["4"], loss_fn=loss_fn)
+            bcloss2 = self.loss2(params, inputs["bc"], true_val=true_val["bc2"], loss_fn=loss_fn)
+            bcloss0 = self.loss0(params, inputs["bc"], true_val=true_val["bc0"], loss_fn=loss_fn)
+            return jnp.array((loss4, bcloss2, bcloss0))
         
         # if update_key == 2:
         #     loss2 = self.loss2(params, inputs["coll"], true_val=true_val["2"], loss_fn=loss_fn)
@@ -258,17 +264,23 @@ class Sin1DPINN(PINN):
         t0 = perf_counter()
         for epoch in range(max_epochs):
             
+            self.get_weights(self.loss_terms,
+                             update_key=update_key,
+                             type=self.train_settings.update_scheme,
+                             epoch=epoch,
+                             update_weights_every=100)
             # Update step
-            self.params, self.opt_state, total_loss, self.prevlosses, weights  = self.update(self.opt_state,
-                                                                                             self.params,
-                                                                                             self.train_points,
-                                                                                             true_val=self.train_true_val,
-                                                                                             update_key=update_key,
-                                                                                             prevlosses=self.prevlosses,
-                                                                                             start_time=t0,
-                                                                                             epoch=epoch,
-                                                                                             learning_rate=self.schedule(epoch)
-                                                                                             )
+            self.params, self.opt_state, total_loss, self.prevlosses  = self.update(self.opt_state,
+                                                                                    self.params,
+                                                                                    self.train_points,
+                                                                                    true_val=self.train_true_val,
+                                                                                    update_key=update_key,
+                                                                                    prevlosses=self.prevlosses,
+                                                                                    start_time=t0,
+                                                                                    epoch=epoch,
+                                                                                    learning_rate=self.schedule(epoch),
+                                                                                    weights=self.weights
+                                                                                    )
             
             
             if (epoch % log_every == 0):
@@ -300,7 +312,7 @@ class Sin1DPINN(PINN):
 
         return
     
-    def plot_derivatives(self):
+    def plot_derivatives2(self):
         xlim = self.geometry_settings["domain"]["interval"]["xlim"]
         xx = jnp.linspace(xlim[0], xlim[1], 501)
 
@@ -325,6 +337,37 @@ class Sin1DPINN(PINN):
         plt.legend(["Diff_error" + str(i) for i in range(5)])
         save_fig(self.dir.figure_dir, "diff_error.pdf", format="pdf", fig=fig)
         
+    
+    def plot_derivatives(self):
+        xlim = self.geometry_settings["domain"]["interval"]["xlim"]
+        xx = jnp.linspace(xlim[0], xlim[1], 501)
+
+        fig = plt.figure()
+        plt.plot(xx, netmap(self.forward)(self.params, xx.reshape(-1, 1)).ravel())
+        plt.plot(xx, netmap(self.grad1  )(self.params, xx.reshape(-1, 1)).ravel())
+        plt.plot(xx, netmap(self.grad2  )(self.params, xx.reshape(-1, 1)).ravel())
+        plt.plot(xx, netmap(self.grad3  )(self.params, xx.reshape(-1, 1)).ravel())
+        plt.plot(xx, netmap(self.grad4  )(self.params, xx.reshape(-1, 1)).ravel(), linestyle="--")
+        plt.legend(["Diff" + str(i) for i in range(5)])
+        save_fig(self.dir.figure_dir, "diff.pdf", format="pdf", fig=fig)
+        
+        fig = plt.figure()
+        plt.plot(xx,  jnp.sin(xx))
+        plt.plot(xx,  jnp.cos(xx))
+        plt.plot(xx, -jnp.sin(xx))
+        plt.plot(xx, -jnp.cos(xx))
+        plt.plot(xx,  jnp.sin(xx), linestyle="--")
+        plt.legend(["Diff" + str(i) for i in range(5)])
+        save_fig(self.dir.figure_dir, "diff_true.pdf", format="pdf", fig=fig)
+
+        fig = plt.figure()
+        plt.semilogy(xx, jnp.abs(netmap(self.forward)(self.params, xx.reshape(-1, 1)).ravel()-jnp.sin(xx)))
+        plt.semilogy(xx, jnp.abs(netmap(self.grad1  )(self.params, xx.reshape(-1, 1)).ravel()-jnp.cos(xx)))
+        plt.semilogy(xx, jnp.abs(netmap(self.grad2  )(self.params, xx.reshape(-1, 1)).ravel()+jnp.sin(xx)))
+        plt.semilogy(xx, jnp.abs(netmap(self.grad3  )(self.params, xx.reshape(-1, 1)).ravel()+jnp.cos(xx)))
+        plt.semilogy(xx, jnp.abs(netmap(self.grad4  )(self.params, xx.reshape(-1, 1)).ravel()-jnp.sin(xx)))
+        plt.legend(["Diff" + str(i) for i in range(5)])
+        save_fig(self.dir.figure_dir, "diff_error.pdf", format="pdf", fig=fig)
 
 
     def eval(self):

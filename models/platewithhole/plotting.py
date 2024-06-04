@@ -107,9 +107,12 @@ def get_plot_data(geometry_settings, hessian, params, grid, mesh_data=None, **kw
         radius = geometry_settings["domain"]["circle"]["radius"]
         xlim = geometry_settings["domain"]["rectangle"]["xlim"]
         ylim = geometry_settings["domain"]["rectangle"]["ylim"]
+        angle = geometry_settings["domain"]["circle"].get("angle")
+        if angle is None:
+            angle = [0, 2*jnp.pi]
 
         X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=grid)
-        R, THETA, plotpoints_polar = get_plot_variables([radius, max(xlim[1], ylim[1])], [0, 4*np.pi], grid=grid)
+        R, THETA, plotpoints_polar = get_plot_variables([radius, max(xlim[1], ylim[1])], angle, grid=grid)
         plotpoints2 = jax.vmap(rtheta2xy)(plotpoints_polar)
 
         assert(jnp.allclose(plotpoints, vrtheta2xy(vxy2rtheta(plotpoints)), atol=1e-4))
@@ -148,9 +151,10 @@ def plot_results(geometry_settings, hessian, params, fig_dir, log_dir, save=True
 
     X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = get_plot_data(geometry_settings, hessian, params, grid=grid, mesh_data=mesh_data, **kwargs)
     radius = geometry_settings["domain"]["circle"]["radius"]
+    angle = geometry_settings["domain"]["circle"].get("angle")
 
     if save:
-        plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=fig_dir, name="Cart_stress", radius=radius)
+        plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=fig_dir, name="Cart_stress", radius=radius, angle=angle)
         plot_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list, fig_dir=fig_dir, name="Polar_stress")
     if log:        
         log_stress(X, Y, sigma_cart_list, sigma_cart_true_list, log_dir=log_dir, name="Cart_stress", varnames="XY", step=step, dpi=dpi)
@@ -161,6 +165,7 @@ def plot_results(geometry_settings, hessian, params, fig_dir, log_dir, save=True
 def plot_potential(X, Y, Z, *, fig_dir, name,
                    extension="png",
                    radius = _DEFAULT_RADIUS,
+                   angle = None,
                    circle_res = _DEFAULT_CIRCLE_RES):
     """
     Function for plotting potential function.
@@ -172,7 +177,7 @@ def plot_potential(X, Y, Z, *, fig_dir, name,
     p = ax.contourf(X, Y, Z, levels=_CLEVELS)
     plt.colorbar(p, ax=ax)
     
-    plot_circle(plt, radius, circle_res, color="red")
+    plot_circle(plt, radius, circle_res, angle=angle, color="red")
     save_fig(fig_dir, name, extension)
     plt.clf()
     return
@@ -182,73 +187,103 @@ def plot_stress(X, Y, Z, Z_true, *, fig_dir, name,
                 extension="png",
                 radius = _DEFAULT_RADIUS,
                 circle_res = _DEFAULT_CIRCLE_RES,
+                angle = None,
                 figsize = (35, 30)):
     """
     Function for plotting stresses in cartesian coordinates.
     """
+    hess_idx = [0, 1, 3]
+
+    vmins = [min(jnp.min(Z_true[i]), jnp.min(Z[i])) for i in hess_idx]
+    vmaxs = [max(jnp.max(Z_true[i]), jnp.max(Z[i])) for i in hess_idx]
+
+
+    u = [
+        [Z[i] for i in hess_idx],
+        [Z_true[i] for i in hess_idx],
+        [jnp.abs(Z[i]-Z_true[i]) for i in hess_idx]
+    ]
+    titles = ["XX stress", "XY stress", "YY stress"]
+    all_titles = [
+        titles,
+        ["True " + t for t in titles],
+        ["Abs. error of " + t for t in titles]
+    ]
+
+
+    fig, ax = plt.subplots(3, len(hess_idx), figsize=figsize)
+
+    for r in range(3):
+        for c, h in enumerate(hess_idx):
+            ax[r, c].set_aspect('auto', adjustable='datalim')
+            ax[r, c].set_title(all_titles[r][c], fontsize=_FONTSIZE)
+            if r < 2:
+                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS, vmin=vmins[c], vmax=vmaxs[c])
+            else:
+                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS)
+            plt.colorbar(p, ax=ax[r, c])
+    # vmin0 = min(jnp.min(Z_true[0]),jnp.min(Z[0]))
+    # vmin1 = min(jnp.min(Z_true[1]),jnp.min(Z[1]))
+    # vmin3 = min(jnp.min(Z_true[3]),jnp.min(Z[3]))
     
-    vmin0 = min(jnp.min(Z_true[0]),jnp.min(Z[0]))
-    vmin1 = min(jnp.min(Z_true[1]),jnp.min(Z[1]))
-    vmin3 = min(jnp.min(Z_true[3]),jnp.min(Z[3]))
-    
-    vmax0 = max(jnp.max(Z_true[0]), jnp.max(Z[0]))
-    vmax1 = max(jnp.max(Z_true[1]), jnp.max(Z[1]))
-    vmax3 = max(jnp.max(Z_true[3]), jnp.max(Z[3]))
+    # vmax0 = max(jnp.max(Z_true[0]), jnp.max(Z[0]))
+    # vmax1 = max(jnp.max(Z_true[1]), jnp.max(Z[1]))
+    # vmax3 = max(jnp.max(Z_true[3]), jnp.max(Z[3]))
     
 
-    fig, ax = plt.subplots(3, 3, figsize=figsize)
-    ax[0, 0].set_aspect('equal', adjustable='box')
-    ax[0, 0].set_title("XX stress", fontsize=_FONTSIZE)
-    p1 = ax[0, 0].contourf(X , Y, Z[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
-    plt.colorbar(p1, ax=ax[0, 0])
+    # fig, ax = plt.subplots(3, 3, figsize=figsize)
+    # ax[0, 0].set_aspect('equal', adjustable='box')
+    # ax[0, 0].set_title("XX stress", fontsize=_FONTSIZE)
+    # p1 = ax[0, 0].contourf(X , Y, Z[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
+    # plt.colorbar(p1, ax=ax[0, 0])
 
-    ax[0, 1].set_aspect('equal', adjustable='box')
-    ax[0, 1].set_title("XY stress", fontsize=_FONTSIZE)
-    p2 = ax[0, 1].contourf(X, Y, Z[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
-    plt.colorbar(p2, ax=ax[0, 1])
+    # ax[0, 1].set_aspect('equal', adjustable='box')
+    # ax[0, 1].set_title("XY stress", fontsize=_FONTSIZE)
+    # p2 = ax[0, 1].contourf(X, Y, Z[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
+    # plt.colorbar(p2, ax=ax[0, 1])
 
-    ax[0, 2].set_aspect('equal', adjustable='box')
-    ax[0, 2].set_title("YY stress", fontsize=_FONTSIZE)
-    p4 = ax[0, 2].contourf(X, Y, Z[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
-    plt.colorbar(p4, ax=ax[0, 2])
-
-
-
-    ax[1, 0].set_aspect('equal', adjustable='box')
-    ax[1, 0].set_title("True XX stress", fontsize=_FONTSIZE)
-    p1 = ax[1, 0].contourf(X, Y, Z_true[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
-    plt.colorbar(p1, ax=ax[1, 0])
-
-    ax[1, 1].set_aspect('equal', adjustable='box')
-    ax[1, 1].set_title("True XY stress", fontsize=_FONTSIZE)
-    p2 = ax[1, 1].contourf(X, Y, Z_true[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
-    plt.colorbar(p2, ax=ax[1, 1])
-
-    ax[1, 2].set_aspect('equal', adjustable='box')
-    ax[1, 2].set_title("True YY stress", fontsize=_FONTSIZE)
-    p4 = ax[1, 2].contourf(X, Y, Z_true[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
-    plt.colorbar(p4, ax=ax[1, 2])
+    # ax[0, 2].set_aspect('equal', adjustable='box')
+    # ax[0, 2].set_title("YY stress", fontsize=_FONTSIZE)
+    # p4 = ax[0, 2].contourf(X, Y, Z[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
+    # plt.colorbar(p4, ax=ax[0, 2])
 
 
 
-    ax[2, 0].set_aspect('equal', adjustable='box')
-    ax[2, 0].set_title("Abs. error of XX stress", fontsize=_FONTSIZE)
-    p1 = ax[2, 0].contourf(X, Y, jnp.abs(Z[0]-Z_true[0]), levels=_CLEVELS)
-    plt.colorbar(p1, ax=ax[2, 0])
+    # ax[1, 0].set_aspect('equal', adjustable='box')
+    # ax[1, 0].set_title("True XX stress", fontsize=_FONTSIZE)
+    # p1 = ax[1, 0].contourf(X, Y, Z_true[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
+    # plt.colorbar(p1, ax=ax[1, 0])
 
-    ax[2, 1].set_aspect('equal', adjustable='box')
-    ax[2, 1].set_title("Abs. error of XY stress", fontsize=_FONTSIZE)
-    p2 = ax[2, 1].contourf(X, Y, jnp.abs(Z[1]-Z_true[1]), levels=_CLEVELS)
-    plt.colorbar(p2, ax=ax[2, 1])
+    # ax[1, 1].set_aspect('equal', adjustable='box')
+    # ax[1, 1].set_title("True XY stress", fontsize=_FONTSIZE)
+    # p2 = ax[1, 1].contourf(X, Y, Z_true[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
+    # plt.colorbar(p2, ax=ax[1, 1])
 
-    ax[2, 2].set_aspect('equal', adjustable='box')
-    ax[2, 2].set_title("Abs. error of YY stress", fontsize=_FONTSIZE)
-    p4 = ax[2, 2].contourf(X, Y, jnp.abs(Z[3]-Z_true[3]), levels=_CLEVELS)
-    plt.colorbar(p4, ax=ax[2, 2])
+    # ax[1, 2].set_aspect('equal', adjustable='box')
+    # ax[1, 2].set_title("True YY stress", fontsize=_FONTSIZE)
+    # p4 = ax[1, 2].contourf(X, Y, Z_true[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
+    # plt.colorbar(p4, ax=ax[1, 2])
 
 
 
-    [plot_circle(ax[i, j], radius, circle_res, color="red") for i in range(3) for j in range(3)]
+    # ax[2, 0].set_aspect('equal', adjustable='box')
+    # ax[2, 0].set_title("Abs. error of XX stress", fontsize=_FONTSIZE)
+    # p1 = ax[2, 0].contourf(X, Y, jnp.abs(Z[0]-Z_true[0]), levels=_CLEVELS)
+    # plt.colorbar(p1, ax=ax[2, 0])
+
+    # ax[2, 1].set_aspect('equal', adjustable='box')
+    # ax[2, 1].set_title("Abs. error of XY stress", fontsize=_FONTSIZE)
+    # p2 = ax[2, 1].contourf(X, Y, jnp.abs(Z[1]-Z_true[1]), levels=_CLEVELS)
+    # plt.colorbar(p2, ax=ax[2, 1])
+
+    # ax[2, 2].set_aspect('equal', adjustable='box')
+    # ax[2, 2].set_title("Abs. error of YY stress", fontsize=_FONTSIZE)
+    # p4 = ax[2, 2].contourf(X, Y, jnp.abs(Z[3]-Z_true[3]), levels=_CLEVELS)
+    # plt.colorbar(p4, ax=ax[2, 2])
+
+
+
+    [plot_circle(ax[i, j], radius, circle_res, angle=angle, color="red") for i in range(3) for j, _ in enumerate(hess_idx)]
     save_fig(fig_dir, name, extension)
     plt.clf()
     return
@@ -269,55 +304,85 @@ def plot_polar_stress(X, Y, Z, Z_true, *, fig_dir, name,
     vmax1 = max(jnp.max(Z_true[1]), jnp.max(Z[1]))
     vmax3 = max(jnp.max(Z_true[3]), jnp.max(Z[3]))
     
-    fig, ax = plt.subplots(3, 3, figsize=figsize)
-    ax[0, 0].set_aspect('equal', adjustable='box')
-    ax[0, 0].set_title("RR stress", fontsize=_FONTSIZE)
-    p1 = ax[0, 0].contourf(X , Y, Z[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
-    plt.colorbar(p1, ax=ax[0, 0])
+    hess_idx = [0, 1, 3]
 
-    ax[0, 1].set_aspect('equal', adjustable='box')
-    ax[0, 1].set_title("RT stress", fontsize=_FONTSIZE)
-    p2 = ax[0, 1].contourf(X, Y, Z[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
-    plt.colorbar(p2, ax=ax[0, 1])
-
-    ax[0, 2].set_aspect('equal', adjustable='box')
-    ax[0, 2].set_title("TT stress", fontsize=_FONTSIZE)
-    p4 = ax[0, 2].contourf(X, Y, Z[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
-    plt.colorbar(p4, ax=ax[0, 2])
+    vmins = [min(jnp.min(Z_true[i]), jnp.min(Z[i])) for i in hess_idx]
+    vmaxs = [max(jnp.max(Z_true[i]), jnp.max(Z[i])) for i in hess_idx]
 
 
-
-    ax[1, 0].set_aspect('equal', adjustable='box')
-    ax[1, 0].set_title("True RR stress", fontsize=_FONTSIZE)
-    p1 = ax[1, 0].contourf(X, Y, Z_true[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
-    plt.colorbar(p1, ax=ax[1, 0])
-
-    ax[1, 1].set_aspect('equal', adjustable='box')
-    ax[1, 1].set_title("True RT stress", fontsize=_FONTSIZE)
-    p2 = ax[1, 1].contourf(X, Y, Z_true[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
-    plt.colorbar(p2, ax=ax[1, 1])
-
-    ax[1, 2].set_aspect('equal', adjustable='box')
-    ax[1, 2].set_title("True TT stress", fontsize=_FONTSIZE)
-    p4 = ax[1, 2].contourf(X, Y, Z_true[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
-    plt.colorbar(p4, ax=ax[1, 2])
+    u = [
+        [Z[i] for i in hess_idx],
+        [Z_true[i] for i in hess_idx],
+        [jnp.abs(Z[i]-Z_true[i]) for i in hess_idx]
+    ]
+    titles = ["RR stress", "RT stress", "TT stress"]
+    all_titles = [
+        titles,
+        ["True " + t for t in titles],
+        ["Abs. error of " + t for t in titles]
+    ]
 
 
+    fig, ax = plt.subplots(3, len(hess_idx), figsize=figsize)
 
-    ax[2, 0].set_aspect('equal', adjustable='box')
-    ax[2, 0].set_title("Abs. error of RR stress", fontsize=_FONTSIZE)
-    p1 = ax[2, 0].contourf(X, Y, jnp.abs(Z[0]-Z_true[0]), levels=_CLEVELS)
-    plt.colorbar(p1, ax=ax[2, 0])
+    for r in range(3):
+        for c, h in enumerate(hess_idx):
+            ax[r, c].set_aspect('auto', adjustable='datalim')
+            ax[r, c].set_title(all_titles[r][c], fontsize=_FONTSIZE)
+            if r < 2:
+                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS, vmin=vmins[c], vmax=vmaxs[c])
+            else:
+                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS)
+            plt.colorbar(p, ax=ax[r, c])
+            
+    # ax[0, 0].set_aspect('equal', adjustable='datalim')
+    # ax[0, 0].set_title("RR stress", fontsize=_FONTSIZE)
+    # p1 = ax[0, 0].contourf(X , Y, Z[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
+    # plt.colorbar(p1, ax=ax[0, 0])
 
-    ax[2, 1].set_aspect('equal', adjustable='box')
-    ax[2, 1].set_title("Abs. error of RT stress", fontsize=_FONTSIZE)
-    p2 = ax[2, 1].contourf(X, Y, jnp.abs(Z[1]-Z_true[1]), levels=_CLEVELS)
-    plt.colorbar(p2, ax=ax[2, 1])
+    # ax[0, 1].set_aspect('equal', adjustable='datalim')
+    # ax[0, 1].set_title("RT stress", fontsize=_FONTSIZE)
+    # p2 = ax[0, 1].contourf(X, Y, Z[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
+    # plt.colorbar(p2, ax=ax[0, 1])
 
-    ax[2, 2].set_aspect('equal', adjustable='box')
-    ax[2, 2].set_title("Abs. error of TT stress", fontsize=_FONTSIZE)
-    p4 = ax[2, 2].contourf(X, Y, jnp.abs(Z[3]-Z_true[3]), levels=_CLEVELS)
-    plt.colorbar(p4, ax=ax[2, 2])
+    # ax[0, 2].set_aspect('equal', adjustable='datalim')
+    # ax[0, 2].set_title("TT stress", fontsize=_FONTSIZE)
+    # p4 = ax[0, 2].contourf(X, Y, Z[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
+    # plt.colorbar(p4, ax=ax[0, 2])
+
+
+
+    # ax[1, 0].set_aspect('equal', adjustable='datalim')
+    # ax[1, 0].set_title("True RR stress", fontsize=_FONTSIZE)
+    # p1 = ax[1, 0].contourf(X, Y, Z_true[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
+    # plt.colorbar(p1, ax=ax[1, 0])
+
+    # ax[1, 1].set_aspect('equal', adjustable='datalim')
+    # ax[1, 1].set_title("True RT stress", fontsize=_FONTSIZE)
+    # p2 = ax[1, 1].contourf(X, Y, Z_true[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
+    # plt.colorbar(p2, ax=ax[1, 1])
+
+    # ax[1, 2].set_aspect('equal', adjustable='datalim')
+    # ax[1, 2].set_title("True TT stress", fontsize=_FONTSIZE)
+    # p4 = ax[1, 2].contourf(X, Y, Z_true[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
+    # plt.colorbar(p4, ax=ax[1, 2])
+
+
+
+    # ax[2, 0].set_aspect('equal', adjustable='datalim')
+    # ax[2, 0].set_title("Abs. error of RR stress", fontsize=_FONTSIZE)
+    # p1 = ax[2, 0].contourf(X, Y, jnp.abs(Z[0]-Z_true[0]), levels=_CLEVELS)
+    # plt.colorbar(p1, ax=ax[2, 0])
+
+    # ax[2, 1].set_aspect('equal', adjustable='datalim')
+    # ax[2, 1].set_title("Abs. error of RT stress", fontsize=_FONTSIZE)
+    # p2 = ax[2, 1].contourf(X, Y, jnp.abs(Z[1]-Z_true[1]), levels=_CLEVELS)
+    # plt.colorbar(p2, ax=ax[2, 1])
+
+    # ax[2, 2].set_aspect('equal', adjustable='datalim')
+    # ax[2, 2].set_title("Abs. error of TT stress", fontsize=_FONTSIZE)
+    # p4 = ax[2, 2].contourf(X, Y, jnp.abs(Z[3]-Z_true[3]), levels=_CLEVELS)
+    # plt.colorbar(p4, ax=ax[2, 2])
 
     save_fig(fig_dir, name, extension)
 

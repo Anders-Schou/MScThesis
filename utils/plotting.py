@@ -47,8 +47,10 @@ def plot_polygon(ax, vertices: jnp.ndarray, *args, **kwargs):
     return
 
 
-def plot_circle(ax, radius: float, resolution: int, *args, **kwargs) -> None:
-    theta = jnp.linspace(0, 2*jnp.pi, resolution+1)
+def plot_circle(ax, radius: float, resolution: int, *args, angle = None, **kwargs) -> None:
+    if angle is None:
+        angle = [0, 2*jnp.pi]
+    theta = jnp.linspace(*angle, resolution+1)
     x = radius * jnp.cos(theta)
     y = radius * jnp.sin(theta)
     ax.plot(x, y, *args, **kwargs)

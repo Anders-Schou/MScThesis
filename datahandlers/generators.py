@@ -37,7 +37,9 @@ def generate_interval_points(key: jax.random.PRNGKey,
 def generate_rectangle_points(key: jax.random.PRNGKey,
                               xlim: Sequence[float],
                               ylim: Sequence[float],
-                              num_points: int | Sequence[int]
+                              num_points: int | Sequence[int],
+                              domain_type: str = "full",
+                              radius: float = 2.0
                               ) -> tuple:
     """
     Order of rectangle sides: Lower horizontal, right vertical, upper horizontal, left vertical.
@@ -54,18 +56,121 @@ def generate_rectangle_points(key: jax.random.PRNGKey,
     else:
         raise ValueError("Argument 'num_points' must be int or tuple.")
     
-    key, *keys = jax.random.split(key, 5)
-    end_points = limits2vertices(xlim, ylim)
-    points = [sample_line(keys[i], end_points[i], shape=(N[i], 1)) for i in range(4)]
+    key, *keys = jax.random.split(key, 6) if "half" in domain_type.lower() else jax.random.split(key, 5)
 
-    return tuple(points)
+    c = lambda p1, p2: jnp.concatenate((p1, p2), axis=0)
+
+    match domain_type.lower():
+        case "full":
+            v = [
+                ([xlim[0], ylim[0]], [xlim[1], ylim[0]]), # Lower horizontal
+                ([xlim[1], ylim[0]], [xlim[1], ylim[1]]), # Right vertical
+                ([xlim[1], ylim[1]], [xlim[0], ylim[1]]), # Upper horizontal
+                ([xlim[0], ylim[1]], [xlim[0], ylim[0]])  # Left vertical
+            ]
+            return tuple(sample_line(keys[i], v[i], shape=(N[i], 1)) for i in range(4))
+        
+        case "half-upper":
+            v = [
+                ([xlim[0], ylim[0]], [-radius, ylim[0]]), # Lower horizontal
+                ([ radius, ylim[0]], [xlim[1], ylim[0]]), # Lower horizontal
+                ([xlim[1], ylim[0]], [xlim[1], ylim[1]]), # Right vertical
+                ([xlim[1], ylim[1]], [xlim[0], ylim[1]]), # Upper horizontal
+                ([xlim[0], ylim[1]], [xlim[0], ylim[0]])  # Left vertical
+            ]
+            N = [math.ceil(N[0] / 2), math.floor(N[0] / 2), *N[1:]]
+            points = [sample_line(keys[i], v[i], shape=(N[i], 1)) for i in range(5)]
+            return (c(points[0], points[1]), points[2], points[3], points[4])
+
+        case "half-lower":
+            v = [
+                ([xlim[0], ylim[0]], [xlim[1], ylim[0]]), # Lower horizontal
+                ([xlim[1], ylim[0]], [xlim[1], ylim[1]]), # Right vertical
+                ([xlim[1], ylim[1]], [ radius, ylim[1]]), # Upper horizontal
+                ([-radius, ylim[1]], [xlim[0], ylim[1]]), # Upper horizontal
+                ([xlim[0], ylim[1]], [xlim[0], ylim[0]])  # Left vertical
+            ]
+            N = [*N[:2], math.ceil(N[2] / 2), math.floor(N[2] / 2), N[3]]
+            points = [sample_line(keys[i], v[i], shape=(N[i], 1)) for i in range(5)]
+            return (points[0], points[1], c(points[2], points[3]), points[4])
+        
+        case "half-left":
+            v = [
+                ([xlim[0], ylim[0]], [xlim[1], ylim[0]]), # Lower horizontal
+                ([xlim[1], ylim[0]], [xlim[1], -radius]), # Right vertical
+                ([xlim[1],  radius], [xlim[1], ylim[1]]), # Right vertical
+                ([xlim[1], ylim[1]], [xlim[0], ylim[1]]), # Upper horizontal
+                ([xlim[0], ylim[1]], [xlim[0], ylim[0]])  # Left vertical
+            ]
+            N = [N[0], math.ceil(N[1] / 2), math.floor(N[1] / 2), *N[2:]]
+            points = [sample_line(keys[i], v[i], shape=(N[i], 1)) for i in range(5)]
+            return (points[0], c(points[1], points[2]), points[3], points[4])
+        
+        case "half-right":
+            v = [
+                ([xlim[0], ylim[0]], [xlim[1], ylim[0]]), # Lower horizontal
+                ([xlim[1], ylim[0]], [xlim[1], ylim[1]]), # Right vertical
+                ([xlim[1], ylim[1]], [xlim[0], ylim[1]]), # Upper horizontal
+                ([xlim[0], ylim[1]], [xlim[0],  radius]), # Left vertical
+                ([xlim[0], -radius], [xlim[0], ylim[0]])  # Left vertical
+            ]
+            N = [*N[:3], math.ceil(N[0] / 2), math.floor(N[0] / 2)]
+            points = [sample_line(keys[i], v[i], shape=(N[i], 1)) for i in range(5)]
+            return (points[0], points[1], points[2], c(points[3], points[4]))
+        
+        case "quarter-1":
+            v = [
+                ([ radius,       0], [xlim[1],       0]), # Lower horizontal
+                ([xlim[1],       0], [xlim[1], ylim[1]]), # Right vertical
+                ([xlim[1], ylim[1]], [      0, ylim[1]]), # Upper horizontal
+                ([      0, ylim[1]], [      0,  radius])  # Left vertical
+            ]
+            return tuple(sample_line(keys[i], v[i], shape=(N[i], 1)) for i in range(4))
+        
+        case "quarter-2":
+            v = [
+                ([xlim[0],       0], [-radius,       0]), # Lower horizontal
+                ([      0,  radius], [      0, ylim[1]]), # Right vertical
+                ([      0, ylim[1]], [xlim[0], ylim[1]]), # Upper horizontal
+                ([xlim[0], ylim[1]], [xlim[0],       0])  # Left vertical
+            ]
+            return tuple(sample_line(keys[i], v[i], shape=(N[i], 1)) for i in range(4))
+        
+        case "quarter-3":
+            v = [
+                ([xlim[0], ylim[0]], [      0, ylim[0]]), # Lower horizontal
+                ([      0, ylim[0]], [      0, -radius]), # Right vertical
+                ([-radius,       0], [xlim[0],       0]), # Upper horizontal
+                ([xlim[0],       0], [xlim[0], ylim[0]])  # Left vertical
+            ]
+            return tuple(sample_line(keys[i], v[i], shape=(N[i], 1)) for i in range(4))
+        
+        case "quarter-4":
+            v = [
+                ([      0, ylim[0]], [xlim[1], ylim[0]]), # Lower horizontal
+                ([xlim[1], ylim[0]], [xlim[1],       0]), # Right vertical
+                ([xlim[1],       0], [ radius,       0]), # Upper horizontal
+                ([      0, -radius], [      0, ylim[0]])  # Left vertical
+            ]
+            return tuple(sample_line(keys[i], v[i], shape=(N[i], 1)) for i in range(4))
+        
+        case _:
+            raise ValueError(f"Unknown domain type: '{domain_type}'.")
+        
 
 
 def generate_circle_points(key: jax.random.PRNGKey,
                            radius: float,
-                           num_points: int
+                           num_points: int,
+                           angle_interval: Sequence[float] | None = None
                            ) -> jax.Array:
-    theta = jax.random.uniform(key, (num_points, 1), minval=0, maxval=2*jnp.pi)
+    theta_min = 0
+    theta_max = 2*jnp.pi
+    if angle_interval is not None:
+        theta_min = angle_interval[0]
+        theta_max = angle_interval[1]
+    
+    theta = jax.random.uniform(key, (num_points, 1), minval=theta_min, maxval=theta_max)
     xc = radius*jnp.cos(theta)
     yc = radius*jnp.sin(theta)
     xyc = jnp.stack([xc, yc], axis=1).reshape((-1,2))
@@ -77,6 +182,8 @@ def generate_collocation_points(key: jax.random.PRNGKey,
                                 ylim: Sequence[float],
                                 num_coll: int,
                                 sobol: bool = True) -> jax.Array:
+    if num_coll <= 0:
+        return jnp.empty((0, 2))
     
     if sobol:
         # Use Sobol QMC sampling (convert key to seed, to make sampling "deterministic")
@@ -99,29 +206,90 @@ def generate_collocation_points(key: jax.random.PRNGKey,
     return xp
     
 
-def generate_extra_points(keyr, keytheta, radius, num_extra):
-    theta_rand = jax.random.uniform(keytheta, (num_extra, 1), minval=0, maxval=2*jnp.pi)
-    r_rand = jax.random.chisquare(keyr, df=2, shape=(num_extra, 1)) / 10 + radius
+def generate_extra_points(keyr, keytheta, radius, num_extra,
+                          angle_interval: Sequence[float] | None = None,
+                          intensity: float = 10.0):
+    if num_extra <= 0:
+        return jnp.empty((0, 2))
+    
+    theta_min = 0
+    theta_max = 2*jnp.pi
+    if angle_interval is not None:
+        theta_min = angle_interval[0]
+        theta_max = angle_interval[1]
+    
+    theta_rand = jax.random.uniform(keytheta, (num_extra, 1), minval=theta_min, maxval=theta_max)
+    r_rand = jax.random.chisquare(keyr, df=2, shape=(num_extra, 1)) / intensity + radius
     xy_extra = jnp.stack([r_rand*jnp.cos(theta_rand), r_rand*jnp.sin(theta_rand)], axis=1).reshape((-1,2))
     return xy_extra
 
 
 def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
                                           radius: float, 
-                                          xlim: Sequence[float],
-                                          ylim: Sequence[float],
+                                          xlim_all: Sequence[float],
+                                          ylim_all: Sequence[float],
                                           points: int | Sequence[int] | None,
-                                          sobol: bool = True
-                                          ) -> jax.Array:
+                                          sobol: bool = True,
+                                          domain_type: str = "full"
+                                          ) -> jax.Array | tuple[jax.Array]:
     """
     This function samples points in the inner of the domain.
+
+    
+    Domain types:
+    'full':         The whole domain ([xlim] X [ylim]).
+    'half-upper':   The upper half of the domain.
+                    Replace 'upper' with 'lower' / 'left' / 'right' to get other halfs.
+    'quarter-1':    First quadrant (x > 0, y > 0) of domain.
+                    Replace '1' with '2' / '3' / '4' to get other quadrants.
     """
     if points is None:
         return jnp.empty((0,))
-
+    
     if not isinstance(points, Sequence):
         points = [points]
-    
+
+    match domain_type.lower():
+        case "full":
+            xlim = xlim_all
+            ylim = ylim_all
+            angle_interval = [0, 2*jnp.pi]
+        case "half-upper":
+            xlim = xlim_all
+            ylim = [0, ylim_all[1]]
+            angle_interval = [0, jnp.pi]
+        case "half-lower":
+            xlim = xlim_all
+            ylim = [ylim_all[0], 0]
+            angle_interval = [jnp.pi, 2*jnp.pi]
+        case "half-left":
+            xlim = [xlim_all[0], 0]
+            ylim = ylim_all
+            angle_interval = [0.5*jnp.pi, 1.5*jnp.pi]
+        case "half-right":
+            xlim = [0, xlim_all[1]]
+            ylim = ylim_all
+            angle_interval = [-0.5*jnp.pi, 0.5*jnp.pi]
+        case "quarter-1":
+            xlim = [0, xlim_all[1]]
+            ylim = [0, ylim_all[1]]
+            angle_interval = [0, 0.5*jnp.pi]
+        case "quarter-2":
+            xlim = [xlim_all[0], 0]
+            ylim = [0, ylim_all[1]]
+            angle_interval = [0.5*jnp.pi, jnp.pi]
+        case "quarter-3":
+            xlim = [xlim_all[0], 0]
+            ylim = [ylim_all[0], 0]
+            angle_interval = [jnp.pi, 1.5*jnp.pi]
+        case "quarter-4":
+            xlim = [0, xlim_all[1]]
+            ylim = [ylim_all[0], 0]
+            angle_interval = [1.5*jnp.pi, 2*jnp.pi]
+        case _:
+            raise ValueError(f"Unknown domain type: '{domain_type}'.")
+        
+
     num_coll = points[0]
 
     # Initial coll point gen
@@ -147,7 +315,7 @@ def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
 
     # Initial extra point gen
     key, keytheta, keyr = jax.random.split(key, 3)
-    xy_extra = generate_extra_points(keyr, keytheta, radius, num_extra)
+    xy_extra = generate_extra_points(keyr, keytheta, radius, num_extra, angle_interval=angle_interval)
     xy_extra = keep_points(xy_extra, lambda p: jnp.logical_and(jnp.logical_and(p[:, 0] >= xlim[0], p[:, 0] <= xlim[1]),
                                                                jnp.logical_and(p[:, 1] >= ylim[0], p[:, 1] <= ylim[1])))
     
@@ -155,9 +323,9 @@ def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
     pnum = xy_extra.shape[0]
     while pnum < num_extra:
         key, keytheta, keyr = jax.random.split(key, 3)
-        tmp = generate_extra_points(keyr, keytheta, radius, num_extra)
+        tmp = generate_extra_points(keyr, keytheta, radius, num_extra, angle_interval=angle_interval)
         tmp = keep_points(xy_extra, lambda p: jnp.logical_and(jnp.logical_and(p[:, 0] >= xlim[0], p[:, 0] <= xlim[1]),
-                                                               jnp.logical_and(p[:, 1] >= ylim[0], p[:, 1] <= ylim[1])))
+                                                              jnp.logical_and(p[:, 1] >= ylim[0], p[:, 1] <= ylim[1])))
         xy_extra = jnp.concatenate((xy_extra, tmp))
         pnum = xy_extra.shape[0]
     xy_extra = xy_extra[:num_extra]
@@ -173,36 +341,54 @@ def generate_rectangle_with_hole(key: jax.random.PRNGKey,
                                  num_coll: int | Sequence[int],
                                  num_rect: int | Sequence[int],
                                  num_circ: int,
-                                 sobol: bool = True
+                                 sobol: bool = True,
+                                 domain_type: str = "full",
+                                 shuffle: bool = False
                                  ) -> dict[str, jax.Array | tuple[jax.Array]]:
     """
     Main function for generating necessary sample points for the plate-with-hole problem.
 
     The function generates 
     """
-
+    angle_intervals = {
+        "full":       [        0.0, 2.0*jnp.pi],
+        "half-upper": [        0.0,     jnp.pi],
+        "half-lower": [     jnp.pi, 2.0*jnp.pi],
+        "half-left":  [ 0.5*jnp.pi, 1.5*jnp.pi],
+        "half-right": [-0.5*jnp.pi, 0.5*jnp.pi],
+        "quarter-1":  [        0.0, 0.5*jnp.pi],
+        "quarter-2":  [ 0.5*jnp.pi,     jnp.pi],
+        "quarter-3":  [     jnp.pi, 1.5*jnp.pi],
+        "quarter-4":  [ 1.5*jnp.pi, 2.0*jnp.pi],
+    }
+    
+    try:
+        angle_interval = angle_intervals[domain_type]
+    except KeyError as k:
+        raise ValueError(f"Unknown domain type: '{domain_type}'.")
 
     key, rectkey, circkey, collkey, permkey = jax.random.split(key, 5)
 
-    xy_coll = generate_collocation_points_with_hole(collkey, radius, xlim, ylim, num_coll, sobol=sobol)
-    xy_coll = jax.random.permutation(permkey, xy_coll)
-    xy_rect = generate_rectangle_points(rectkey, xlim, ylim, num_rect)
-    xy_circ = generate_circle_points(circkey, radius, num_circ)
+    xy_coll = generate_collocation_points_with_hole(collkey, radius, xlim, ylim, num_coll, sobol=sobol, domain_type=domain_type)
+    if shuffle:
+        xy_coll = jax.random.permutation(permkey, xy_coll)
+    xy_rect = generate_rectangle_points(rectkey, xlim, ylim, num_rect, domain_type=domain_type, radius=radius)
+    xy_circ = generate_circle_points(circkey, radius, num_circ, angle_interval=angle_interval)
     # xy_test = generate_collocation_points_with_hole(testkey, radius, xlim, ylim, num_test)
     return {"coll": xy_coll, "rect": xy_rect, "circ": xy_circ}
     
 
 def generate_rectangle(key: jax.random.PRNGKey,
-                                 xlim: Sequence[float],
-                                 ylim: Sequence[float],
-                                 num_coll: int | Sequence[int],
-                                 num_rect: int | Sequence[int]) -> dict[str, jax.Array | tuple[jax.Array]]:
+                       xlim: Sequence[float],
+                       ylim: Sequence[float],
+                       num_coll: int | Sequence[int],
+                       num_rect: int | Sequence[int]) -> dict[str, jax.Array | tuple[jax.Array]]:
     """
     Main function for generating necessary sample points for the square problem.
-
-    The function generates 
     """
-
+    
+    if isinstance(num_coll, list):
+        num_coll = num_coll[0]
 
     key, rectkey, collkey, permkey = jax.random.split(key, 4)
 

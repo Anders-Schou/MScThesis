@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections.abc import Callable
 import pathlib
 import json
@@ -9,6 +9,8 @@ import jax.numpy as jnp
 import flax.linen as nn
 import optax
 from torch.utils.tensorboard import SummaryWriter
+
+from models.activations import WaveletActivation
 
 
 class SettingsInterpretationError(Exception):
@@ -73,6 +75,7 @@ class SupportedActivations:
     swish: Callable = nn.silu
     sin: Callable = jax.jit(jnp.sin)
     cos: Callable = jax.jit(jnp.cos)
+    wavelet: Callable = WaveletActivation(1.0)
 
 
 @dataclass
@@ -121,12 +124,49 @@ class DirectorySettings(Settings):
 
 
 @dataclass
+class WeightSchemeSettings:
+    normalized: bool = False
+
+
+@dataclass
+class AdaptiveWeightSchemeSettings(WeightSchemeSettings):
+    running_average: float | None = None
+    update_every: int = 50
+    loss_weighted: bool = False
+
+
+@dataclass(kw_only=True)
+class WeightedSettings(WeightSchemeSettings):
+    weights: jax.Array
+
+
+@dataclass(kw_only=True)
+class UnweightedSettings(WeightSchemeSettings):
+    pass
+
+
+@dataclass(kw_only=True)
+class GradNormSettings(AdaptiveWeightSchemeSettings):
+    pass
+
+
+@dataclass(kw_only=True)
+class SoftAdaptSettings(AdaptiveWeightSchemeSettings):
+    order: int = 1
+    beta: float = 0.1
+    normalized_rates: bool = False
+    delta_time: float | None = None
+    shift_by_max_val: bool = True
+
+
+@dataclass(kw_only=True)
 class TrainingSettings(Settings):
     sampling: dict
     iterations: int = 1000
     optimizer: Callable = SupportedOptimizers.adam
     update_scheme: str = "unweighted"
     update_kwargs: dict | None = None
+    update_settings: WeightSchemeSettings = field(default_factory=lambda: UnweightedSettings())
     learning_rate: float = 1e-3
     batch_size: int | None = None
     decay_rate: float | None = None
@@ -141,7 +181,6 @@ class EvaluationSettings(Settings):
     sampling: dict
     error_metric: str = "L2-rel"
     transfer_learning: bool = False
-    pass
 
 
 @dataclass
@@ -154,36 +193,6 @@ class PlottingSettings(Settings):
 
 
 @dataclass
-class SoftAdaptSettings(Settings):
-    order: int = 1
-    beta: float = 0.1
-    normalized: bool = False
-    loss_weighted: bool = False
-    delta_time: float | None = None
-    shift_by_max_val: bool = True
-
-
-@dataclass
-class WeightedSettings(Settings):
-    weights: jax.Array
-    normalized: bool = False
-    save_last: int = 5
-
-
-@dataclass
-class UnweightedSettings(Settings):
-    normalized: bool = False
-    save_last: int = 5
-
-
-@dataclass
-class RunningAverageSettings(Settings):
-    normalized: bool = False
-    alpha: float = 0.9
-    save_last: int = 5
-
-
-@dataclass
 class MLPSettings(Settings):
     name: str = "MLP"
     input_dim: int = 1
@@ -191,6 +200,7 @@ class MLPSettings(Settings):
     hidden_dims: int | list[int] = 32
     activation: Callable | list[Callable] = SupportedActivations.tanh
     initialization: Callable | list[Callable] = nn.initializers.glorot_normal
+    embed: int | None = None
 
 
 @dataclass

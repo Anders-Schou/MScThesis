@@ -5,11 +5,11 @@ from scipy.special import gamma
 import jax
 import jax.numpy as jnp
 
-from setup.settings import DefaultSettings, RunningAverageSettings
+from setup.settings import DefaultSettings, GradNormSettings
 
 
 
-def running_average(sett: RunningAverageSettings) -> Callable[..., Callable]:
+def running_average_old(sett: GradNormSettings) -> Callable[..., Callable]:
     """
     Function implementing the Running_average algorithm.
     RETURNS a DECORATOR for the function calculating
@@ -66,3 +66,35 @@ def running_average(sett: RunningAverageSettings) -> Callable[..., Callable]:
             return weighted_losses, prevlosses, weights
         return wrapper
     return running_average_decorator
+
+
+def gradnorm(sett: GradNormSettings, grads, num_losses: int, loss_weights: jax.Array | None = None) -> jax.Array:
+    grad_per_loss = jnp.concatenate([i.reshape(num_losses, -1) for i in jax.tree.leaves(grads)], axis=1)
+    grad_norms = jnp.linalg.norm(grad_per_loss, axis=1)
+    grad_sum = jnp.mean(grad_norms)
+    
+    weights = jax.tree_util.tree_map(lambda x: (grad_sum / x), grad_norms)
+    
+    if sett.loss_weighted:
+        if loss_weights is not None:
+            weights = jnp.divide(w:=jnp.multiply(loss_weights, weights), jnp.sum(w))
+
+    if sett.normalized:
+        weights = jnp.divide(weights, jnp.sum(weights))
+    
+    return jax.lax.stop_gradient(weights)
+
+
+# def gradnorm()
+#     grads = jacrev(self.losses)(params, batch, *args)
+
+#     # Compute the grad norm of each loss
+#     grad_norm_dict = {}
+#     for key, value in grads.items():
+#         flattened_grad = flatten_pytree(value)
+#         grad_norm_dict[key] = jnp.linalg.norm(flattened_grad)
+
+#     # Compute the mean of grad norms over all losses
+#     mean_grad_norm = jnp.mean(jnp.stack(tree_leaves(grad_norm_dict)))
+#     # Grad Norm Weighting
+#     w = tree_map(lambda x: (mean_grad_norm / x), grad_norm_dict)
