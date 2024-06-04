@@ -1,4 +1,5 @@
 from functools import partial
+from typing import Callable
 
 import numpy as np
 import jax
@@ -50,8 +51,8 @@ class BiharmonicPINN(PlateWithHolePINN):
 
         # Return loss
         if true_val is None:
-            return ms(bi_out)
-        return mse(bi_out, true_val)
+            return self.loss_fn(bi_out)
+        return self.loss_fn(bi_out, true_val)
 
     def resample_eval(self,
                       params,
