@@ -6,6 +6,9 @@ from time import perf_counter
 
 import jax
 import jax.numpy as jnp
+
+import flax.linen as nn
+
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -69,3 +72,15 @@ def find_first_integer(s: str):
             break
         
     return int(s[start:i])
+
+
+class WaveletActivation(nn.Module):
+    param_scale: float = 1.0
+
+    @nn.compact
+    def __call__(self, x):
+        c = self.param(
+            "coeff", nn.initializers.normal(self.param_scale), (2,)
+        )
+        return jnp.add(jnp.multiply(c[0], jnp.cos(x)), jnp.multiply(c[1], jnp.sin(x)))
+

@@ -10,7 +10,7 @@ import flax.linen as nn
 import optax
 from torch.utils.tensorboard import SummaryWriter
 
-from models.activations import WaveletActivation
+from utils.utils import WaveletActivation
 
 
 class SettingsInterpretationError(Exception):
