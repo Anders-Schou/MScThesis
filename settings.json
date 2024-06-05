@@ -1,71 +1,68 @@
 {
-    "id": "005",
+    "id": "094",
     "seed": 1234,
+    "description": "Airy-net",
 
     "io": {
-        "base_dir": "/zhome/74/7/147523/MSc/experiments/01",
-        "figure_dir": "/zhome/74/7/147523/MSc/experiments/01/figures",
-        "model_dir": "/zhome/74/7/147523/MSc/experiments/01/models",
-        "image_dir": "/zhome/74/7/147523/MSc/experiments/01/images",
-        "log_dir": "/zhome/74/7/147523/MSc/experiments/01/logs"
-    },
-    
-    "verbosity": {
-        "init": true,
-        "training": false,
-        "evaluation": true,
-        "plotting": true,
-        "sampling": true
+        "base_dir": "/zhome/e8/9/147091/MSc/experiments/12",
+        "figure_dir": "/zhome/e8/9/147091/MSc/experiments/12/figures",
+        "model_dir": "/zhome/e8/9/147091/MSc/experiments/12/models",
+        "image_dir": "/zhome/e8/9/147091/MSc/experiments/12/images",
+        "log_dir": "/zhome/e8/9/147091/MSc/experiments/12/logs"
     },
 
     "geometry": {
         "domain": {
             "rectangle": { "xlim": [-10.0, 10.0], "ylim": [-10.0, 10.0] },
-            "circle": { "center": [0.0, 0.0], "radius": 2.0 }
+            "circle": { "center": [0.0, 0.0], "radius": 2.0 },
+            "type": "quarter-1"
         }
     },
 
     "run": {
         "train": {
             "sampling": {
-                "coll": [5000, 50],
-                "rect": [1000, 1000, 1000, 1000],
-                "circ": 1000,
-                "data": [10, 10]
+                "coll": [900, 100],
+                "rect": [100, 100, 100, 100],
+                "circ": 100,
+                "data": [0, 50],
+                "separate_coll": true
             },
-            "iterations": 200000,
+            "iterations": 50000,
+            "loss_fn": "2",
             "optimizer": "adam",
-            "update_scheme": "running_average",
-            "update_weights_every": 100,
+            "update_scheme": "gradnorm",
             "update_kwargs": {
                 "softadapt": {
-                    "order": 4,
+                    "order": 1,
                     "beta": 0.1,
-                    "loss_weighted": false,
-                    "normalized": false
+                    "loss_weighted": true,
+                    "normalized": true,
+                    "update_every": 1000,
+                    "running_average": 0.9
+                },
+                "gradnorm": {
+                    "normalized": true,
+                    "update_every": 1000,
+                    "running_average": 0.9
                 },
                 "unweighted": {
-                    "normalized": true,
-                    "save_last": 5
+                    "normalized": true
                 },
                 "weighted": {
-                    "weights": [5, 5, 2],
-                    "normalized": false
-                },
-                "running_average": {
-                    "alpha": 0.9,
-                    "normalized": false
+                    "weights": [5, 5, 5, 5, 1, 1, 1, 1, 50, 5, 5, 1],
+                    "normalized": true
                 }
             },
-            "learning_rate": 5e-2,
+            "learning_rate": 5e-3,
             "batch_size": null,
-            "decay_rate": 0.90,
+            "decay_rate": 0.9,
             "decay_steps": 2000,
             "transfer_learning": false,
             "resampling": {
                 "do_resampling": false,
-                "resample_steps": 5000,
-                "resample_num": [100, 100],
+                "resample_steps": 10000,
+                "resample_num": [1000, 200],
                 "loss_emphasis": 2,
                 "replace": true
             },
@@ -91,9 +88,10 @@
                     "specifications": {
                         "input_dim": 2,
                         "output_dim": 1,
-                        "hidden_dims": [128],
-                        "activation": "silu",
-                        "initialization": "glorot_normal"
+                        "hidden_dims": [32, 32],
+                        "activation": "tanh",
+                        "initialization": "glorot_normal",
+                        "embed": 64
                     }
                 }
             ]
@@ -111,6 +109,10 @@
                     "color": "blue",
                     "s": 5
                 },
+                "coll_extra": {
+                    "color": "magenta",
+                    "s": 5
+                },
                 "rect": {
                     "color": "green",
                     "s": 5
@@ -123,7 +125,7 @@
         },
         "results": {
             "do_plots": true,
-            "plot_every": 5000,
+            "plot_every": null,
             "overwrite": false,
             "file_extension": "png"
         },
