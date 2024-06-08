@@ -382,7 +382,8 @@ def generate_rectangle(key: jax.random.PRNGKey,
                        xlim: Sequence[float],
                        ylim: Sequence[float],
                        num_coll: int | Sequence[int],
-                       num_rect: int | Sequence[int]) -> dict[str, jax.Array | tuple[jax.Array]]:
+                       num_rect: int | Sequence[int],
+                       sobol: bool = True) -> dict[str, jax.Array | tuple[jax.Array]]:
     """
     Main function for generating necessary sample points for the square problem.
     """
@@ -392,7 +393,7 @@ def generate_rectangle(key: jax.random.PRNGKey,
 
     key, rectkey, collkey, permkey = jax.random.split(key, 4)
 
-    xy_coll = generate_collocation_points(collkey, xlim, ylim, num_coll)
+    xy_coll = generate_collocation_points(collkey, xlim, ylim, num_coll, sobol=sobol)
     xy_coll = jax.random.permutation(permkey, xy_coll)
     xy_rect = generate_rectangle_points(rectkey, xlim, ylim, num_rect)
     return {"coll": xy_coll, "rect": xy_rect}

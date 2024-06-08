@@ -200,7 +200,9 @@ class MLPSettings(Settings):
     hidden_dims: int | list[int] = 32
     activation: Callable | list[Callable] = SupportedActivations.tanh
     initialization: Callable | list[Callable] = nn.initializers.glorot_normal
-    embed: int | None = None
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
 
 
 @dataclass

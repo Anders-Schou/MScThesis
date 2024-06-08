@@ -125,7 +125,7 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     of neurons in hidden layers.
     """
     settings_dict = settings_dict.copy()
-
+    
     # Get default settings
     settings = MLPSettings()
 
@@ -192,8 +192,16 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
 
     # Fourier embedding
     if settings_dict.get("embed") is not None:
-        check_pos_int(settings_dict["embed"], "embed")
         settings.embed = settings_dict["embed"]
+
+    # Weight factorization
+    if settings_dict.get("reparam") is not None:
+        settings.reparam = settings_dict["reparam"]
+
+    # Non-dimensionalization
+    if settings_dict.get("nondim") is not None:
+        check_pos(settings_dict["nondim"], "nondim")
+        settings.nondim = settings_dict["nondim"]
 
     return settings2dict(settings)
 

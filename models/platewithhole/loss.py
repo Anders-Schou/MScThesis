@@ -61,7 +61,7 @@ def loss_rect_extra(*output: jax.Array, true_val: dict[str, jax.Array] | None = 
 def loss_circ_rr_rt(input: jax.Array, output: jax.Array, true_val: dict[str, jax.Array] | None = None, loss_fn: Callable = mse):
 
     # Get polar angle
-    theta = xy2theta(input[:, 1], input[:, 0])
+    theta = xy2theta(input[:, 0], input[:, 1])
     
     ct = jnp.cos(theta)
     st = jnp.sin(theta)
@@ -83,7 +83,7 @@ def loss_circ_rr_rt(input: jax.Array, output: jax.Array, true_val: dict[str, jax
 def loss_circ_tt(input: jax.Array, output: jax.Array, true_val: dict[str, jax.Array] | None = None, loss_fn: Callable = mse):
 
     # Get polar angle
-    theta = xy2theta(input[:, 1], input[:, 0])
+    theta = xy2theta(input[:, 0], input[:, 1])
     
     ct = jnp.cos(theta)
     st = jnp.sin(theta)

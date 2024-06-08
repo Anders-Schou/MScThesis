@@ -71,9 +71,10 @@ class MLP(nn.Module):
     hidden_dims: Sequence[int]
     activation: Sequence[Callable]
     initialization: Sequence[Callable]
-    embed: int | None = None
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
     polar: bool = False
-    periodic: bool = False
 
     @nn.compact
     def __call__(self, input, transform = None):
@@ -83,28 +84,28 @@ class MLP(nn.Module):
         else:
             x = input
         
+        if self.nondim:
+            x = x / self.nondim
+        
         if self.polar:
             r = jnp.linalg.norm(x, axis=-1)
             theta = jnp.arctan2(x[1], x[0])
             x = jnp.concatenate((x, jnp.array([r, jnp.cos(2*theta)])))
 
         if self.embed:
-            x = FourierEmbedding(1.0, self.embed)(x)
-
-        if self.periodic:
-            x = jnp.cos(2*jnp.pi*x)
+            x = FourierEmbedding(self.embed["embed_scale"], self.embed["embed_dim"])(x)
         
         for i, feats in enumerate(self.hidden_dims):
             x = FactDense(features=feats,
-                         kernel_init=self.initialization[i](),
-                         name=f"{self.name}_linear{i}",
-                         reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
+                          kernel_init=self.initialization[i](),
+                          name=f"{self.name}_linear{i}",
+                          reparam=self.reparam)(x)
             x = self.activation[i](x)
         
         x = FactDense(features=self.output_dim,
-                     kernel_init=self.initialization[-1](),
-                     name=f"{self.name}_linear_output",
-                     reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
+                      kernel_init=self.initialization[-1](),
+                      name=f"{self.name}_linear_output",
+                      reparam=self.reparam)(x)
         
         return x
 
@@ -127,7 +128,7 @@ class ModifiedMLP(nn.Module):
     hidden_dims: Sequence[int]
     activation: Sequence[Callable]
     initialization: Sequence[Callable]
-    embed: bool = False
+    embed: int | None = None
     polar: bool = False
 
     @nn.compact
@@ -144,7 +145,7 @@ class ModifiedMLP(nn.Module):
             x = jnp.concatenate((x, jnp.array([r, jnp.cos(2*theta)])))
         
         if self.embed:
-            x = FourierEmbedding(1.0, 128)(x)
+            x = FourierEmbedding(self.embed["embed_scale"], self.embed["embed_dim"])(x)
         
         u = FactDense(features=self.hidden_dims[0],
                      kernel_init=self.initialization[0](),
@@ -295,15 +296,10 @@ class AiryNet(nn.Module):
 
         r1 = rt[0]
         r2 = jnp.square(r1)
-        r3 = jnp.multiply(r1, r2)
         r4 = jnp.square(r2)
-        rinv1 = jnp.reciprocal(r1)
         rinv2 = jnp.reciprocal(r2)
-        rinv3 = jnp.reciprocal(r3)
-        rinv4 = jnp.reciprocal(r4)
         log_r = jnp.log(r1)
-        rlog_r = jnp.multiply(log_r, r1)
-        r2log_r = jnp.multiply(rlog_r, r1)
+        r2log_r = jnp.multiply(log_r, r2)
 
         # p = self.param(
         #     "coeff", nn.initializers.normal(self.param_scale), (12,)
@@ -313,13 +309,10 @@ class AiryNet(nn.Module):
         # u_t = jnp.add(cos_2t, p[-1])
         # return jnp.multiply(u_r, u_t)
         p = self.param(
-            "coeff", nn.initializers.normal(self.param_scale), (33,)
+            "coeff", nn.initializers.normal(self.param_scale), (8,)
         )
-
-        rbasis = jnp.array([r1, r2, r3, r4, rinv1, rinv2, rinv3, rinv4, log_r, r2log_r, 1.])
-        tbasis = jnp.array([cos_2t, sin_2t, 1.])
-        ubasis = jnp.kron(rbasis, tbasis)
-        return jnp.dot(p, ubasis)
+        phibasis = jnp.array([r2log_r, r2, log_r, 1, r2*cos_2t, r4*cos_2t, rinv2*cos_2t, cos_2t])
+        return jnp.dot(p, phibasis)
 
 
 class FourierEmbedding(nn.Module):
