@@ -123,10 +123,17 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
     
     # Homogeneous BC at inner circle
     if "circ" not in exclude:
+        true_data = jax.vmap(cart_stress_true, in_axes=(0, None, None))(points["circ"], tension, radius)
+        vals["circ"] = {}
+        # Exact data
+        vals["circ"]["true_scxx"] = true_data[:, 0, 0]
+        vals["circ"]["true_scxy"] = true_data[:, 0, 1]
+        vals["circ"]["true_scyy"] = true_data[:, 1, 1]
+        
         polar_points = jax.vmap(xy2rtheta)(points["circ"])
         true_tt = jax.vmap(sigma_tt_true, in_axes=(0, 0, None, None))(polar_points[:, 0], polar_points[:, 1], tension, radius)
-        circ = {"stt": true_tt}
-        vals["circ"] = circ
+        vals["circ"]["stt"] = true_tt
+        
     
     # If used, constrains the solution to a specific one, namely
     # the one where the terms of order 0 and 1 vanish.

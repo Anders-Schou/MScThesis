@@ -1,0 +1,165 @@
+{
+    "id": "111",
+    "seed": 1234,
+    "description": "Test before pushing",
+
+    "io": {
+        "base_dir": "/zhome/74/7/147523/MSc/experiments/DeepONet",
+        "figure_dir": "/zhome/74/7/147523/MSc/experiments/DeepONet/figures",
+        "model_dir": "/zhome/74/7/147523/MSc/experiments/DeepONet/models",
+        "image_dir": "/zhome/74/7/147523/MSc/experiments/DeepONet/images",
+        "log_dir": "/zhome/74/7/147523/MSc/experiments/DeepONet/logs"
+    },
+    
+    "verbosity": {
+        "init": true,
+        "training": true,
+        "evaluation": true,
+        "plotting": true,
+        "sampling": true
+    },
+
+    "geometry": {
+        "domain": {
+            "rectangle": { "xlim": [-10.0, 10.0], "ylim": [-10.0, 10.0] },
+            "circle": { "center": [0.0, 0.0]}
+        },
+        "trunk": {
+            "radius_interval": [0.1, 5.0],
+            "tension_interval": [1, 20]
+        }
+    },
+
+    "run": {
+        "train": {
+            "sampling": {                
+                "coll": [8000, 0],
+                "rect": [250, 250, 250, 250],
+                "circ": 1000,
+                "data": [0, 0],
+                "branch": 2
+            },
+            "iterations": 1,
+            "optimizer": "adam",
+            "loss_fn": "mse",
+            "update_scheme": "softadapt",
+            "update_weights_every": 100,
+            "update_kwargs": {
+                "softadapt": {
+                    "order": 4,
+                    "beta": 0.1,
+                    "loss_weighted": true,
+                    "normalized": false,
+                    "update_every": 10,
+                    "running_average": 0.9
+                },
+                "gradnorm": {
+                    "normalized": true,
+                    "update_every": 10,
+                    "running_average": 0.9
+                },
+                "unweighted": {
+                    "normalized": true
+                },
+                "weighted": {
+                    "weights": [5, 5, 2],
+                    "normalized": false
+                }
+            },
+            "learning_rate": 1e-3,
+            "batch_size": null,
+            "decay_rate": 1.0,
+            "decay_steps": 100,
+            "transfer_learning": false,
+            "resampling": {
+                "do_resampling": false,
+                "resample_steps": 5000,
+                "resample_num": [100, 100],
+                "loss_emphasis": 2,
+                "replace": true
+            },
+            "jitted_update": true
+        },
+        "eval": {
+            "error_metric": "L2-rel",
+            "transfer_learning": false,
+            "sampling": {
+                "coll": [200, 200],
+                "rect": [50, 50, 50, 50],
+                "circ": 100,
+                "data": [50, 10],
+                "branch_point": [2, 10]
+            }
+        }
+    },
+
+    "model": {
+        "deeponet": {
+            "networks": {
+                "branch": [
+                    {
+                        "architecture": "mlp",
+                        "specifications": {
+                            "input_dim": 2,
+                            "output_dim": 50,
+                            "hidden_dims": [128, 128],
+                            "activation": "silu",
+                            "initialization": "glorot_normal"
+                        }
+                    }
+                ],
+                "trunk": {
+                    "architecture": "mlp",
+                    "specifications": {
+                        "input_dim": 2,
+                        "output_dim": 50,
+                        "hidden_dims": [128, 128],
+                        "activation": "silu",
+                        "initialization": "glorot_normal"
+                    }
+                }
+            }
+        }
+    },
+
+    "plotting": {
+        "sampling": {
+            "do_plots": true,
+            "plot_every": null,
+            "overwrite": false,
+            "file_extension": "png",
+            "kwargs": {
+                "coll": {
+                    "color": "blue",
+                    "s": 5
+                },
+                "rect": {
+                    "color": "green",
+                    "s": 5
+                },
+                "circ": {
+                    "color": "red",
+                    "s": 5
+                },
+                "data": {
+                    "color": "orange",
+                    "s": 5
+                }
+            }
+        },
+        "results": {
+            "do_plots": false,
+            "plot_every": 5000,
+            "overwrite": false,
+            "file_extension": "png"
+        },
+        "dpi": 75,
+        "grid": 201
+    },
+
+    "logging": {
+        "do_logging": true,
+        "log_every": 10,
+        "print_every": 1
+    }
+}
