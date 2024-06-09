@@ -68,7 +68,7 @@ def _get_update(loss_fun: Callable,
     def update(
         opt_state: optax.OptState,
         params: optax.Params,
-        inputs: dict[str],
+        *args,
         true_val: dict[str] | None = None,
         weights: jax.Array | None = None,
         **kwargs
@@ -79,7 +79,7 @@ def _get_update(loss_fun: Callable,
         
         # Compute loss and gradients
         (total_loss, aux), grads = jax.value_and_grad(loss_fun, has_aux=True)(
-            params, inputs, weights=weights, true_val=true_val, **kwargs)
+            params, *args, weights=weights, true_val=true_val, **kwargs)
 
         # Apply updates
         updates, opt_state = optimizer.update(grads, opt_state, params)
@@ -101,7 +101,7 @@ def _verbose_update(print_every = LoggingSettings.print_every):
             # Call update function
             params, opt_state, total_loss, aux = update_func(*args, **kwargs)
             
-            if epoch % print_every == 0:
+            if epoch % print_every == 0 and kwargs.get("batch_num", 0) == 0:
                 tcurr = perf_counter()
                 if len(weights.shape) == 0:
                     ww = [weights]

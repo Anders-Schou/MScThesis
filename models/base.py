@@ -235,48 +235,48 @@ class Model(metaclass=ABCMeta):
         # return
 
     
-    def _init_prevlosses(self,
-                         loss_term_fun: Callable[..., jax.Array],
-                         update_key: int | None = None,
-                         prevlosses: jax.Array | None = None
-                         ) -> None:
-        """
-        Method for initializing array of previous losses.
-        If prevlosses is None, the method sets prevlosses
-        to an array determined by the loss type.
-        """
+    # def _init_prevlosses(self,
+    #                      loss_term_fun: Callable[..., jax.Array],
+    #                      update_key: int | None = None,
+    #                      prevlosses: jax.Array | None = None
+    #                      ) -> None:
+    #     """
+    #     Method for initializing array of previous losses.
+    #     If prevlosses is None, the method sets prevlosses
+    #     to an array determined by the loss type.
+    #     """
         
-        if not self._initialized():
-            raise ModelNotInitializedError("The model has not been initialized properly.")
+    #     if not self._initialized():
+    #         raise ModelNotInitializedError("The model has not been initialized properly.")
         
-        # Calculate initial loss
-        init_loss = loss_term_fun(self.params, self.train_points, 
-                                  true_val=self.train_true_val, update_key=update_key)
+    #     # Calculate initial loss
+    #     init_loss = loss_term_fun(self.params, self.train_points, 
+    #                               true_val=self.train_true_val, update_key=update_key)
         
-        if len(init_loss.shape) == 0:
-            loss_shape = 1
-        else:
-            loss_shape = init_loss.shape[0]
+    #     if len(init_loss.shape) == 0:
+    #         loss_shape = 1
+    #     else:
+    #         loss_shape = init_loss.shape[0]
 
-        # Check which loss to use
-        if self.train_settings.update_scheme == "softadapt":
-            numrows = self.train_settings.update_kwargs["softadapt"]["order"] + 1
-            if prevlosses is None or prevlosses.shape[0] < numrows:
-                self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape)) \
-                    * jnp.linspace(numrows, 1, numrows).reshape(-1, 1) # Fake decreasing loss
-            else:
-                # Use 'numrows' last losses
-                self.prevlosses = prevlosses[-(numrows):, :]
-        elif self.train_settings.update_scheme == "weighted":
-            numrows = self.train_settings.update_kwargs["weighted"]["save_last"]
-            self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
-        elif self.train_settings.update_scheme == "running_average":
-            numrows = self.train_settings.update_kwargs["running_average"]["save_last"]
-            self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
-        else:
-            numrows = self.train_settings.update_kwargs["unweighted"]["save_last"]
-            self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
-        return
+    #     # Check which loss to use
+    #     if self.train_settings.update_scheme == "softadapt":
+    #         numrows = self.train_settings.update_kwargs["softadapt"]["order"] + 1
+    #         if prevlosses is None or prevlosses.shape[0] < numrows:
+    #             self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape)) \
+    #                 * jnp.linspace(numrows, 1, numrows).reshape(-1, 1) # Fake decreasing loss
+    #         else:
+    #             # Use 'numrows' last losses
+    #             self.prevlosses = prevlosses[-(numrows):, :]
+    #     elif self.train_settings.update_scheme == "weighted":
+    #         numrows = self.train_settings.update_kwargs["weighted"]["save_last"]
+    #         self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
+    #     elif self.train_settings.update_scheme == "running_average":
+    #         numrows = self.train_settings.update_kwargs["running_average"]["save_last"]
+    #         self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
+    #     else:
+    #         numrows = self.train_settings.update_kwargs["unweighted"]["save_last"]
+    #         self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
+    #     return
     
     def init_weights(self,
                     loss_term_fun: Callable[..., jax.Array],

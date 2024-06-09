@@ -18,6 +18,7 @@ from models.networks import netmap
 from models.platewithhole import analytic
 from models.platewithhole import loss as pwhloss
 from models.platewithhole import plotting as pwhplot
+from models.loss import L2rel
 from utils.transforms import (
     vrtheta2xy,
     vxy2rtheta
@@ -284,6 +285,7 @@ class PlateWithHolePINN(PINN):
             
         if self.plot_settings.get("sampling", {"do_plots": False}).get("do_plots"):
             self.plot_training_points()
+            
         return
 
     def define_plot_geometry(self):
@@ -389,18 +391,39 @@ class PlateWithHolePINN(PINN):
         self.train_true_val["coll"] = analytic.get_true_vals(self.train_points, exclude=["rect", "circ", "diri", "data"])["coll"]
         return
     
-    @timer
+    def eval(self, point_type: str = "coll", metric: str  = "L2-rel", **kwargs):
+        """
+        Evaluates the Cartesian stresses using the specified metric.
+        """
+        match metric.lower():
+            case "l2-rel":
+                metric_fun = jax.jit(L2rel)
+            case _:
+                print(f"Unknown metric: '{metric}'. Default ('L2-rel') is used for evaluation.")
+                metric_fun = jax.jit(L2rel)
+
+        u = jnp.squeeze(netmap(self.jitted_hessian)(self.params, self.eval_points[point_type]))
+        u_true = jax.vmap(partial(analytic.cart_stress_true, **kwargs))(self.eval_points[point_type])
+
+        err = jnp.array([[metric_fun(u[:, i, j], u_true[:, i, j]) for i in range(2)] for j in range(2)])
+
+        attr_name = "eval_result"
+
+        if hasattr(self, attr_name):
+            if isinstance(self.eval_result, dict):
+                self.eval_result[metric] = err
+            else:
+                raise TypeError(f"Attribute '{attr_name}' is not a dictionary. "
+                                f"Evaluation error cannot be added.")
+        else:
+            self.eval_result = {metric: err}
+        
+        return err
+    
     def plot_results(self, save=True, log=False, step=None):
-        if not hasattr(self, 'mesh_data'):
-            values = pwhplot.get_plot_data(self.geometry_settings_plotting, 
-                                           self.hessian, self.params, 
-                                           grid=self.plot_settings["grid"])
-            keys = ["X", "Y", "R", "THETA", "sigma_cart_list", "sigma_cart_true_list", "sigma_polar_list", "sigma_polar_true_list", "plotpoints", "plotpoints2"]
-            self.mesh_data = {key: val for key, val in zip(keys, values)}
-            
         pwhplot.plot_results(self.geometry_settings_plotting, self.jitted_hessian, self.params, 
                              self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step, 
-                             grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"], mesh_data=self.mesh_data)
+                             grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"])
         
         
     def plot_boundaries(self, save=True, log=False, step=None):

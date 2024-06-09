@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 from . import analytic
 from models.networks import netmap
@@ -64,92 +63,54 @@ def plot_loss(
     plt.clf()
     return
 
-def get_plot_data(geometry_settings, hessian, params, grid, mesh_data=None, **kwargs):
-    if mesh_data is not None:
-        radius = geometry_settings["domain"]["circle"]["radius"]
-        
-        X = mesh_data["X"]
-        Y = mesh_data["Y"]
-        R = mesh_data["R"]
-        THETA = mesh_data["THETA"]
-        plotpoints = mesh_data["plotpoints"]
-        plotpoints2 = mesh_data["plotpoints2"]
-        
-        sigma_cart_true_list = mesh_data["sigma_cart_true_list"]
-        sigma_polar_true_list = mesh_data["sigma_polar_true_list"]
-        
-        assert(jnp.allclose(plotpoints, vrtheta2xy(vxy2rtheta(plotpoints)), atol=1e-4))
+def get_plot_data(geometry_settings, hessian, params, grid, **kwargs):
 
-        # Hessian prediction
-        phi_pp = netmap(hessian)(params, plotpoints).reshape(-1, 4)
+    radius = geometry_settings["domain"]["circle"]["radius"]
+    xlim = geometry_settings["domain"]["rectangle"]["xlim"]
+    ylim = geometry_settings["domain"]["rectangle"]["ylim"]
+    angle = geometry_settings["domain"]["circle"].get("angle")
+    if angle is None:
+        angle = [0, 2*jnp.pi]
 
-        # Calculate stress from phi function: phi_xx = sigma_yy, phi_yy = sigma_xx, phi_xy = -sigma_xy
-        sigma_cart = phi_pp[:, [3, 1, 2, 0]]
-        sigma_cart = sigma_cart.at[:, [1, 2]].set(-phi_pp[:, [1, 2]])
+    X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=grid)
+    R, THETA, plotpoints_polar = get_plot_variables([radius, max(xlim[1], ylim[1])], angle, grid=grid)
+    plotpoints2 = jax.vmap(rtheta2xy)(plotpoints_polar)
 
-        # List and reshape the four components
-        sigma_cart_list = [sigma_cart[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
+    assert(jnp.allclose(plotpoints, vrtheta2xy(vxy2rtheta(plotpoints)), atol=1e-4))
 
-        # Repeat for the other set of points (polar coords converted to cartesian coords)
-        phi_pp2 = netmap(hessian)(params, plotpoints2).reshape(-1, 4)
+    # Hessian prediction
+    phi_pp = netmap(hessian)(params, plotpoints).reshape(-1, 4)
 
-        # Calculate stress from phi function
-        sigma_cart2 = phi_pp2[:, [3, 1, 2, 0]]
-        sigma_cart2 = sigma_cart2.at[:, [1, 2]].set(-phi_pp2[:, [1, 2]])
+    # Calculate stress from phi function: phi_xx = sigma_yy, phi_yy = sigma_xx, phi_xy = -sigma_xy
+    sigma_cart = phi_pp[:, [3, 1, 2, 0]]
+    sigma_cart = sigma_cart.at[:, [1, 2]].set(-phi_pp[:, [1, 2]])
 
-        # Convert these points to polar coordinates before listing and reshaping
-        sigma_polar = jax.vmap(cart2polar_tensor, in_axes=(0, 0))(sigma_cart2.reshape(-1, 2, 2), plotpoints2).reshape(-1, 4)
-        sigma_polar_list = [sigma_polar[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
-        
-        return X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list
+    # List and reshape the four components
+    sigma_cart_list = [sigma_cart[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
 
-    else:
-        radius = geometry_settings["domain"]["circle"]["radius"]
-        xlim = geometry_settings["domain"]["rectangle"]["xlim"]
-        ylim = geometry_settings["domain"]["rectangle"]["ylim"]
-        angle = geometry_settings["domain"]["circle"].get("angle")
-        if angle is None:
-            angle = [0, 2*jnp.pi]
+    # Repeat for the other set of points (polar coords converted to cartesian coords)
+    phi_pp2 = netmap(hessian)(params, plotpoints2).reshape(-1, 4)
 
-        X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=grid)
-        R, THETA, plotpoints_polar = get_plot_variables([radius, max(xlim[1], ylim[1])], angle, grid=grid)
-        plotpoints2 = jax.vmap(rtheta2xy)(plotpoints_polar)
+    # Calculate stress from phi function
+    sigma_cart2 = phi_pp2[:, [3, 1, 2, 0]]
+    sigma_cart2 = sigma_cart2.at[:, [1, 2]].set(-phi_pp2[:, [1, 2]])
 
-        assert(jnp.allclose(plotpoints, vrtheta2xy(vxy2rtheta(plotpoints)), atol=1e-4))
+    # Convert these points to polar coordinates before listing and reshaping
+    sigma_polar = jax.vmap(cart2polar_tensor, in_axes=(0, 0))(sigma_cart2.reshape(-1, 2, 2), plotpoints2).reshape(-1, 4)
+    sigma_polar_list = [sigma_polar[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
 
-        # Hessian prediction
-        phi_pp = netmap(hessian)(params, plotpoints).reshape(-1, 4)
+    # Calculate true stresses (cartesian and polar)
+    sigma_cart_true = jax.vmap(analytic.cart_stress_true)(plotpoints, **kwargs)
+    sigma_cart_true_list = [sigma_cart_true.reshape(-1, 4)[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
+    sigma_polar_true = jax.vmap(analytic.polar_stress_true)(plotpoints_polar, **kwargs)
+    sigma_polar_true_list = [sigma_polar_true.reshape(-1, 4)[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
 
-        # Calculate stress from phi function: phi_xx = sigma_yy, phi_yy = sigma_xx, phi_xy = -sigma_xy
-        sigma_cart = phi_pp[:, [3, 1, 2, 0]]
-        sigma_cart = sigma_cart.at[:, [1, 2]].set(-phi_pp[:, [1, 2]])
-
-        # List and reshape the four components
-        sigma_cart_list = [sigma_cart[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
-
-        # Repeat for the other set of points (polar coords converted to cartesian coords)
-        phi_pp2 = netmap(hessian)(params, plotpoints2).reshape(-1, 4)
-
-        # Calculate stress from phi function
-        sigma_cart2 = phi_pp2[:, [3, 1, 2, 0]]
-        sigma_cart2 = sigma_cart2.at[:, [1, 2]].set(-phi_pp2[:, [1, 2]])
-
-        # Convert these points to polar coordinates before listing and reshaping
-        sigma_polar = jax.vmap(cart2polar_tensor, in_axes=(0, 0))(sigma_cart2.reshape(-1, 2, 2), plotpoints2).reshape(-1, 4)
-        sigma_polar_list = [sigma_polar[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
-
-        # Calculate true stresses (cartesian and polar)
-        sigma_cart_true = jax.vmap(analytic.cart_stress_true)(plotpoints, **kwargs)
-        sigma_cart_true_list = [sigma_cart_true.reshape(-1, 4)[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
-        sigma_polar_true = jax.vmap(analytic.polar_stress_true)(plotpoints_polar, **kwargs)
-        sigma_polar_true_list = [sigma_polar_true.reshape(-1, 4)[:, i].reshape(R.shape)*(R >= radius) for i in range(4)]
-
-        return X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list, plotpoints, plotpoints2
+    return X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list
 
 
-def plot_results(geometry_settings, hessian, params, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, mesh_data=None, **kwargs):
+def plot_results(geometry_settings, hessian, params, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, **kwargs):
 
-    X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = get_plot_data(geometry_settings, hessian, params, grid=grid, mesh_data=mesh_data, **kwargs)
+    X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = get_plot_data(geometry_settings, hessian, params, grid=grid, **kwargs)
     radius = geometry_settings["domain"]["circle"]["radius"]
     angle = geometry_settings["domain"]["circle"].get("angle")
 
@@ -222,66 +183,6 @@ def plot_stress(X, Y, Z, Z_true, *, fig_dir, name,
             else:
                 p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS)
             plt.colorbar(p, ax=ax[r, c])
-    # vmin0 = min(jnp.min(Z_true[0]),jnp.min(Z[0]))
-    # vmin1 = min(jnp.min(Z_true[1]),jnp.min(Z[1]))
-    # vmin3 = min(jnp.min(Z_true[3]),jnp.min(Z[3]))
-    
-    # vmax0 = max(jnp.max(Z_true[0]), jnp.max(Z[0]))
-    # vmax1 = max(jnp.max(Z_true[1]), jnp.max(Z[1]))
-    # vmax3 = max(jnp.max(Z_true[3]), jnp.max(Z[3]))
-    
-
-    # fig, ax = plt.subplots(3, 3, figsize=figsize)
-    # ax[0, 0].set_aspect('equal', adjustable='box')
-    # ax[0, 0].set_title("XX stress", fontsize=_FONTSIZE)
-    # p1 = ax[0, 0].contourf(X , Y, Z[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
-    # plt.colorbar(p1, ax=ax[0, 0])
-
-    # ax[0, 1].set_aspect('equal', adjustable='box')
-    # ax[0, 1].set_title("XY stress", fontsize=_FONTSIZE)
-    # p2 = ax[0, 1].contourf(X, Y, Z[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
-    # plt.colorbar(p2, ax=ax[0, 1])
-
-    # ax[0, 2].set_aspect('equal', adjustable='box')
-    # ax[0, 2].set_title("YY stress", fontsize=_FONTSIZE)
-    # p4 = ax[0, 2].contourf(X, Y, Z[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
-    # plt.colorbar(p4, ax=ax[0, 2])
-
-
-
-    # ax[1, 0].set_aspect('equal', adjustable='box')
-    # ax[1, 0].set_title("True XX stress", fontsize=_FONTSIZE)
-    # p1 = ax[1, 0].contourf(X, Y, Z_true[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
-    # plt.colorbar(p1, ax=ax[1, 0])
-
-    # ax[1, 1].set_aspect('equal', adjustable='box')
-    # ax[1, 1].set_title("True XY stress", fontsize=_FONTSIZE)
-    # p2 = ax[1, 1].contourf(X, Y, Z_true[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
-    # plt.colorbar(p2, ax=ax[1, 1])
-
-    # ax[1, 2].set_aspect('equal', adjustable='box')
-    # ax[1, 2].set_title("True YY stress", fontsize=_FONTSIZE)
-    # p4 = ax[1, 2].contourf(X, Y, Z_true[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
-    # plt.colorbar(p4, ax=ax[1, 2])
-
-
-
-    # ax[2, 0].set_aspect('equal', adjustable='box')
-    # ax[2, 0].set_title("Abs. error of XX stress", fontsize=_FONTSIZE)
-    # p1 = ax[2, 0].contourf(X, Y, jnp.abs(Z[0]-Z_true[0]), levels=_CLEVELS)
-    # plt.colorbar(p1, ax=ax[2, 0])
-
-    # ax[2, 1].set_aspect('equal', adjustable='box')
-    # ax[2, 1].set_title("Abs. error of XY stress", fontsize=_FONTSIZE)
-    # p2 = ax[2, 1].contourf(X, Y, jnp.abs(Z[1]-Z_true[1]), levels=_CLEVELS)
-    # plt.colorbar(p2, ax=ax[2, 1])
-
-    # ax[2, 2].set_aspect('equal', adjustable='box')
-    # ax[2, 2].set_title("Abs. error of YY stress", fontsize=_FONTSIZE)
-    # p4 = ax[2, 2].contourf(X, Y, jnp.abs(Z[3]-Z_true[3]), levels=_CLEVELS)
-    # plt.colorbar(p4, ax=ax[2, 2])
-
-
 
     [plot_circle(ax[i, j], radius, circle_res, angle=angle, color="red") for i in range(3) for j, _ in enumerate(hess_idx)]
     save_fig(fig_dir, name, extension)
@@ -335,55 +236,6 @@ def plot_polar_stress(X, Y, Z, Z_true, *, fig_dir, name,
                 p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS)
             plt.colorbar(p, ax=ax[r, c])
             
-    # ax[0, 0].set_aspect('equal', adjustable='datalim')
-    # ax[0, 0].set_title("RR stress", fontsize=_FONTSIZE)
-    # p1 = ax[0, 0].contourf(X , Y, Z[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
-    # plt.colorbar(p1, ax=ax[0, 0])
-
-    # ax[0, 1].set_aspect('equal', adjustable='datalim')
-    # ax[0, 1].set_title("RT stress", fontsize=_FONTSIZE)
-    # p2 = ax[0, 1].contourf(X, Y, Z[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
-    # plt.colorbar(p2, ax=ax[0, 1])
-
-    # ax[0, 2].set_aspect('equal', adjustable='datalim')
-    # ax[0, 2].set_title("TT stress", fontsize=_FONTSIZE)
-    # p4 = ax[0, 2].contourf(X, Y, Z[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
-    # plt.colorbar(p4, ax=ax[0, 2])
-
-
-
-    # ax[1, 0].set_aspect('equal', adjustable='datalim')
-    # ax[1, 0].set_title("True RR stress", fontsize=_FONTSIZE)
-    # p1 = ax[1, 0].contourf(X, Y, Z_true[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
-    # plt.colorbar(p1, ax=ax[1, 0])
-
-    # ax[1, 1].set_aspect('equal', adjustable='datalim')
-    # ax[1, 1].set_title("True RT stress", fontsize=_FONTSIZE)
-    # p2 = ax[1, 1].contourf(X, Y, Z_true[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
-    # plt.colorbar(p2, ax=ax[1, 1])
-
-    # ax[1, 2].set_aspect('equal', adjustable='datalim')
-    # ax[1, 2].set_title("True TT stress", fontsize=_FONTSIZE)
-    # p4 = ax[1, 2].contourf(X, Y, Z_true[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
-    # plt.colorbar(p4, ax=ax[1, 2])
-
-
-
-    # ax[2, 0].set_aspect('equal', adjustable='datalim')
-    # ax[2, 0].set_title("Abs. error of RR stress", fontsize=_FONTSIZE)
-    # p1 = ax[2, 0].contourf(X, Y, jnp.abs(Z[0]-Z_true[0]), levels=_CLEVELS)
-    # plt.colorbar(p1, ax=ax[2, 0])
-
-    # ax[2, 1].set_aspect('equal', adjustable='datalim')
-    # ax[2, 1].set_title("Abs. error of RT stress", fontsize=_FONTSIZE)
-    # p2 = ax[2, 1].contourf(X, Y, jnp.abs(Z[1]-Z_true[1]), levels=_CLEVELS)
-    # plt.colorbar(p2, ax=ax[2, 1])
-
-    # ax[2, 2].set_aspect('equal', adjustable='datalim')
-    # ax[2, 2].set_title("Abs. error of TT stress", fontsize=_FONTSIZE)
-    # p4 = ax[2, 2].contourf(X, Y, jnp.abs(Z[3]-Z_true[3]), levels=_CLEVELS)
-    # plt.colorbar(p4, ax=ax[2, 2])
-
     save_fig(fig_dir, name, extension)
 
     plt.clf()
@@ -426,8 +278,6 @@ def log_stress(X, Y, Z, Z_true, *, log_dir, name, step=None, varnames="XY", dpi=
         log_plot(X, Y, Z_true[3], name=name+"/True/"+varnames[1]+varnames[1], log_dir=log_dir, step=step,
                 vmin=min(jnp.min(Z_true[3]),jnp.min(Z[3])), 
                 vmax=max(jnp.max(Z_true[3]),jnp.max(Z[3])), dpi=dpi)
-            
-            
             
             
 def plot_boundaries(geometry_settings, hessian, params, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, **kwargs):
