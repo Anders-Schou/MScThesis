@@ -121,6 +121,7 @@ class DirectorySettings(Settings):
     model_dir: pathlib.Path | None = None
     image_dir: pathlib.Path | None = None
     log_dir: pathlib.Path | None = None
+    settings_path: pathlib.Path | None = None
 
 
 @dataclass
@@ -222,7 +223,8 @@ def log_settings(settings_dict: dict,
                  log_dir: pathlib.Path,
                  *,
                  tensorboard: bool = False,
-                 text_file: bool = False
+                 text_file: bool = False,
+                 empty_dir: bool = False
                  ) -> None:
     """
     Logs JSON file of settings in Tensorboard and/or a text file.
@@ -237,7 +239,8 @@ def log_settings(settings_dict: dict,
         json_hp = json.dumps(hp, indent=2)
         return "".join("\t" + line for line in json_hp.splitlines(True))
     
-    os.system(f"rm -rf {log_dir}/*")
+    if empty_dir:
+        os.system(f"rm -rf {log_dir}/*")
     writer = SummaryWriter(log_dir=log_dir)
     writer.add_text("settings.json", pretty_json(settings_dict))
     writer.close()

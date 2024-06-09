@@ -56,7 +56,7 @@ def parse_arguments() -> dict:
     parser.add_argument("--settings", type=str, required=True)
     args = parser.parse_args()
     json_dict = load_json(args.settings)
-    shutil.copy(args.settings, json_dict["io"]["log_dir"] + '/' + json_dict["id"])
+    json_dict["io"]["settings_path"] = args.settings
     return json_dict
 
 
@@ -491,6 +491,7 @@ def parse_directory_settings(settings_dict: dict,
     dir.log_dir = dir.log_dir / id
     shutil.rmtree(dir.log_dir / log_str, ignore_errors=True) # Remove current log_dir if it exists
     dir.log_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(settings_dict["settings_path"], dir.log_dir)
 
     return dir
 

@@ -85,7 +85,7 @@ class Model(metaclass=ABCMeta):
         self._parse_logging_settings(settings["logging"])
         
         if self.logging.do_logging:
-            log_settings(settings, self.dir.log_dir, tensorboard=True, text_file=False)
+            log_settings(settings, self.dir.log_dir, tensorboard=True, text_file=False, empty_dir=False)
         
         if settings.get("description"):
             with open(self.dir.log_dir / "description.txt", "a+") as file:
@@ -404,8 +404,12 @@ class Model(metaclass=ABCMeta):
     def _initialized(self) -> bool:
         has_params = hasattr(self, "params")
         has_train_points = hasattr(self, "train_points")
+        has_train_points_branch = hasattr(self, "train_points_branch")
+        has_train_points_trunk = hasattr(self, "train_points_trunk")
         has_eval_points = hasattr(self, "eval_points")
-        return has_params and has_train_points and has_eval_points
+        has_eval_points_branch = hasattr(self, "eval_points_branch")
+        has_eval_points_trunk = hasattr(self, "eval_points_trunk")
+        return has_params and (has_train_points or (has_train_points_branch and has_train_points_trunk)) and (has_eval_points or (has_eval_points_branch and has_eval_points_trunk))
 
  
     @abstractmethod
