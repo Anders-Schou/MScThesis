@@ -29,6 +29,7 @@ from setup.parsers import (
 from .optim import get_update
 from .loss import softadapt, gradnorm, running_average
 from utils.plotting import save_fig
+from utils.checkpoint import write_model, load_model
 
 
 class Model(metaclass=ABCMeta):
@@ -155,20 +156,47 @@ class Model(metaclass=ABCMeta):
         """
         pass
 
-    def save_state(self):
-        """
-        Save model state. Call to a more general function write_model() ...
-        """
-
-        raise NotImplementedError("Method for saving model state is not implemented.")
-
-    def load_state(self):
+    
+    def load_model(self, step: int | None = None, dir: str | None = None):
         """
         Load model state.
         """
+        if dir is None:
+            dir = self.dir.model_dir
         
-        raise NotImplementedError("Method for loading model state is not implemented.")
-    
+        if step is not None:
+            self.params = load_model(step, dir)
+        
+        try: 
+            self.train_settings.iterations
+        except:
+            step = 0
+        else:
+            step = self.train_settings.iterations
+        finally:
+            self.params = load_model(step, dir)
+        return
+        
+    def write_model(self, step: int | None = None, dir: str | None = None):
+        """
+        Save model state. Call to a more general function write_model() ...
+        """
+        if dir is None:
+            dir = self.dir.model_dir
+        
+        if step is not None:
+            write_model(self.params, step, dir)
+            
+        try: 
+            self.train_settings.iterations
+        except:
+            step = 0
+        else:
+            step = self.train_settings.iterations
+        finally:
+            write_model(self.params, step, dir)
+        return
+
     def _loss_terms(self) -> jax.Array:
         """
         Method for calculating loss terms. Loss terms may be defined
@@ -212,71 +240,6 @@ class Model(metaclass=ABCMeta):
 
         self._loss_terms = fun
         return
-
-        # # Check if SoftAdapt should be used
-        # if self.train_settings.update_scheme == "softadapt":
-        #     self._loss_terms = softadapt(SoftAdaptSettings(
-        #         **self.train_settings.update_kwargs["softadapt"]))(fun)
-        # elif self.train_settings.update_scheme == "weighted":
-        #     self._loss_terms = weighted(WeightedSettings(
-        #         **self.train_settings.update_kwargs["weighted"]))(fun)
-        # elif self.train_settings.update_scheme == "running_average":
-        #     self._loss_terms = running_average(RunningAverageSettings(
-        #         **self.train_settings.update_kwargs["running_average"]))(fun)
-        # else:
-        #     self._loss_terms = unweighted(UnweightedSettings(
-        #         **self.train_settings.update_kwargs["unweighted"]))(fun)
-        
-        # if self.train_settings.update_scheme == "softadapt":
-        #     self._loss_terms = compute_losses(SoftAdaptSettings(
-        #         **self.train_settings.update_kwargs["softadapt"]))(fun)
-        # else:
-        #     self._loss_terms = compute_losses()(fun)
-        # return
-
-    
-    # def _init_prevlosses(self,
-    #                      loss_term_fun: Callable[..., jax.Array],
-    #                      update_key: int | None = None,
-    #                      prevlosses: jax.Array | None = None
-    #                      ) -> None:
-    #     """
-    #     Method for initializing array of previous losses.
-    #     If prevlosses is None, the method sets prevlosses
-    #     to an array determined by the loss type.
-    #     """
-        
-    #     if not self._initialized():
-    #         raise ModelNotInitializedError("The model has not been initialized properly.")
-        
-    #     # Calculate initial loss
-    #     init_loss = loss_term_fun(self.params, self.train_points, 
-    #                               true_val=self.train_true_val, update_key=update_key)
-        
-    #     if len(init_loss.shape) == 0:
-    #         loss_shape = 1
-    #     else:
-    #         loss_shape = init_loss.shape[0]
-
-    #     # Check which loss to use
-    #     if self.train_settings.update_scheme == "softadapt":
-    #         numrows = self.train_settings.update_kwargs["softadapt"]["order"] + 1
-    #         if prevlosses is None or prevlosses.shape[0] < numrows:
-    #             self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape)) \
-    #                 * jnp.linspace(numrows, 1, numrows).reshape(-1, 1) # Fake decreasing loss
-    #         else:
-    #             # Use 'numrows' last losses
-    #             self.prevlosses = prevlosses[-(numrows):, :]
-    #     elif self.train_settings.update_scheme == "weighted":
-    #         numrows = self.train_settings.update_kwargs["weighted"]["save_last"]
-    #         self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
-    #     elif self.train_settings.update_scheme == "running_average":
-    #         numrows = self.train_settings.update_kwargs["running_average"]["save_last"]
-    #         self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
-    #     else:
-    #         numrows = self.train_settings.update_kwargs["unweighted"]["save_last"]
-    #         self.prevlosses = jnp.tile(init_loss, numrows).reshape((numrows, loss_shape))
-    #     return
     
     def init_weights(self,
                     loss_term_fun: Callable[..., jax.Array],
@@ -514,3 +477,5 @@ class Model(metaclass=ABCMeta):
         
         return
         
+        
+    

@@ -135,17 +135,10 @@ class PINN01(BiharmonicPINN):
                 if (epoch % sample_every == (sample_every-1)):
                     if epoch < (max_epochs-1):
                         self.resample(self.resample_eval)
-        if do_log:
+        if do_log and epoch > log_every:
             self.plot_loss(self.all_losses, {f"{loss_name}": key for key, loss_name in enumerate(self.loss_names)}, fig_dir=self.dir.figure_dir, name="losses.png", epoch_step=log_every)
         return
 
-    def load_model(self):
-        self.params = load_model(self.train_settings.iterations, self.dir.model_dir)
-        return
-        
-    def write_model(self):
-        write_model(self.params, self.train_settings.iterations, self.dir.model_dir)
-        return
 
 if __name__ == "__main__":
     t1 = perf_counter()
