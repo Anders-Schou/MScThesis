@@ -71,7 +71,3 @@ class BiharmonicPINN(SquarePINN):
         if true_val is None:
             return sq(bi_out)
         return sqe(bi_out, true_val)
-
-    def eval(self):
-        pass
-        

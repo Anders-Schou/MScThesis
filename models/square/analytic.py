@@ -22,7 +22,6 @@ def cart_stress_true(xy, **kwargs):
 def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | None],
                   *,
                   exclude: Sequence[str] | None = None,
-                  ylim = None,
                   noise: float | None = None,
                   key = None
                   ) -> dict[str, jax.Array | dict[str, jax.Array] | None]:
@@ -32,8 +31,7 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
     
     # Homogeneous PDE ==> RHS is zero
     if "coll" not in exclude:
-        coll = None
-        vals["coll"] = coll
+        vals["coll"] = 4*jnp.sin(points["coll"][:, 0])*jnp.sin(points["coll"][:, 1])
 
     # True stresses in domain
     if "data" not in exclude:
@@ -62,28 +60,34 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
     
     # Only inhomogeneous BCs at two sides of rectangle
     if "rect" not in exclude:
-        # rect_points = [p.shape[0] for p in points["rect"]]
-        # rect = {"yy1": jnp.full((rect_points[1],), _TENSION),
-        #         "yy3": jnp.full((rect_points[3],), _TENSION)}
         
         true_rect = [jax.vmap(cart_stress_true)(points["rect"][i]) for i in range(4)]
 
         rect = {
-                "xx0":  true_rect[0][:, 1, 1],
-                "xy0": -true_rect[0][:, 0, 1],
-                "yy1":  true_rect[1][:, 0, 0],
-                "xy1": -true_rect[1][:, 1, 0],
-                "xx2":  true_rect[2][:, 1, 1],
-                "xy2": -true_rect[2][:, 0, 1],
-                "yy3":  true_rect[3][:, 0, 0],
-                "xy3": -true_rect[3][:, 1, 0],
-                "yy0":  true_rect[0][:, 0, 0], # extra
-                "xx1":  true_rect[1][:, 1, 1], # extra
-                "yy2":  true_rect[2][:, 0, 0], # extra
-                "xx3":  true_rect[3][:, 1, 1]  # extra
+                "xx0":  true_rect[0][:, 0, 0],
+                "xy0":  true_rect[0][:, 0, 1],
+                "yy1":  true_rect[1][:, 1, 1],
+                "xy1":  true_rect[1][:, 0, 1],
+                "xx2":  true_rect[2][:, 0, 0],
+                "xy2":  true_rect[2][:, 0, 1],
+                "yy3":  true_rect[3][:, 1, 1],
+                "xy3":  true_rect[3][:, 0, 1],
+                "yy0":  true_rect[0][:, 1, 1], # extra
+                "xx1":  true_rect[1][:, 0, 0], # extra
+                "yy2":  true_rect[2][:, 1, 1], # extra
+                "xx3":  true_rect[3][:, 0, 0]  # extra
                 }
 
 
         vals["rect"] = rect
+    
+        
+    if "diri" not in exclude:
+        diri = {"di0": jnp.sin(points["rect"][0][:, 0])*jnp.sin(points["rect"][0][:, 1]),
+                "di1": jnp.sin(points["rect"][1][:, 0])*jnp.sin(points["rect"][1][:, 1]),
+                "di2": jnp.sin(points["rect"][2][:, 0])*jnp.sin(points["rect"][2][:, 1]),
+                "di3": jnp.sin(points["rect"][3][:, 0])*jnp.sin(points["rect"][3][:, 1])}
+        vals["diri"] = diri
+
 
     return vals

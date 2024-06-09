@@ -13,6 +13,8 @@ from utils.plotting import (
 )
 
 
+_DEFAULT_RADIUS = 2
+_DEFAULT_CIRCLE_RES = 100
 _CLEVELS = 101
 _FONTSIZE = 40
 
@@ -53,7 +55,7 @@ def plot_loss(
     plt.clf()
     return
 
-def get_plot_data(geometry_settings, hessian, params, grid, **kwargs):
+def get_plot_data(geometry_settings, forward, hessian, params, grid, **kwargs):
     
     xlim = geometry_settings["domain"]["rectangle"]["xlim"]
     ylim = geometry_settings["domain"]["rectangle"]["ylim"]
@@ -61,11 +63,13 @@ def get_plot_data(geometry_settings, hessian, params, grid, **kwargs):
     X, Y, plotpoints = get_plot_variables(xlim, ylim, grid=grid)
 
     # Hessian prediction
+    phi = netmap(forward)(params, plotpoints).reshape(X.shape)
+    phi_true = (jnp.sin(plotpoints[:, 0])*jnp.sin(plotpoints[:, 1])).reshape(X.shape)
+    
     phi_pp = netmap(hessian)(params, plotpoints).reshape(-1, 4)
 
     # Calculate stress from phi function: phi_xx = sigma_yy, phi_yy = sigma_xx, phi_xy = -sigma_xy
-    sigma_cart = phi_pp[:, [3, 1, 2, 0]]
-    sigma_cart = sigma_cart.at[:, [1, 2]].set(-phi_pp[:, [1, 2]])
+    sigma_cart = phi_pp
 
     # List and reshape the four components
     sigma_cart_list = [sigma_cart[:, i].reshape(X.shape) for i in range(4)]
@@ -74,31 +78,37 @@ def get_plot_data(geometry_settings, hessian, params, grid, **kwargs):
     sigma_cart_true = jax.vmap(analytic.cart_stress_true)(plotpoints, **kwargs)
     sigma_cart_true_list = [sigma_cart_true.reshape(-1, 4)[:, i].reshape(X.shape) for i in range(4)]
 
-    return X, Y, sigma_cart_list, sigma_cart_true_list
+    return X, Y, phi, phi_true, sigma_cart_list, sigma_cart_true_list
 
 
-def plot_results(geometry_settings, hessian, params, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, **kwargs):
+def plot_results(geometry_settings, forward, hessian, params, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, **kwargs):
 
-    X, Y, sigma_cart_list, sigma_cart_true_list = get_plot_data(geometry_settings, hessian, params, grid=grid, **kwargs)
+    X, Y, phi, phi_true, sigma_cart_list, sigma_cart_true_list = get_plot_data(geometry_settings, forward, hessian, params, grid=grid, **kwargs)
 
     if save:
         plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=fig_dir, name="Cart_stress")
+        plot_potential(X, Y, phi, phi_true, fig_dir=fig_dir, name="Potential")
     if log:        
         log_stress(X, Y, sigma_cart_list, sigma_cart_true_list, log_dir=log_dir, name="Cart_stress", varnames="XY", step=step, dpi=dpi)
 
     return
 
-def plot_potential(X, Y, Z, *, fig_dir, name,
+def plot_potential(X, Y, Z, Z_true, *, fig_dir, name,
                    extension="png"):
     """
     Function for plotting potential function.
     """    
-    fig = plt.figure(figsize=(10, 10))
-    ax = fig.gca()
-    ax.set_aspect('equal', adjustable='box')
-    ax.set_title("Prediction", fontsize=20)
-    p = ax.contourf(X, Y, Z, levels=_CLEVELS)
-    plt.colorbar(p, ax=ax)
+    fig, ax = plt.subplots(1, 2, figsize=(15, 30))
+    ax[0].set_aspect('equal', adjustable='box')
+    ax[0].set_title("Prediction", fontsize=20)
+    p = ax[0].contourf(X, Y, Z, levels=_CLEVELS)
+    plt.colorbar(p, ax=ax[0])
+    
+    
+    ax[1].set_aspect('equal', adjustable='box')
+    ax[1].set_title("Prediction", fontsize=20)
+    p = ax[1].contourf(X, Y, Z_true, levels=_CLEVELS)
+    plt.colorbar(p, ax=ax[1])
     
     save_fig(fig_dir, name, extension)
     plt.clf()
@@ -107,69 +117,43 @@ def plot_potential(X, Y, Z, *, fig_dir, name,
 
 def plot_stress(X, Y, Z, Z_true, *, fig_dir, name,
                 extension="png",
+                radius = _DEFAULT_RADIUS,
+                circle_res = _DEFAULT_CIRCLE_RES,
+                angle = None,
                 figsize = (35, 30)):
     """
     Function for plotting stresses in cartesian coordinates.
     """
-    
-    vmin0 = min(jnp.min(Z_true[0]),jnp.min(Z[0]))
-    vmin1 = min(jnp.min(Z_true[1]),jnp.min(Z[1]))
-    vmin3 = min(jnp.min(Z_true[3]),jnp.min(Z[3]))
-    
-    vmax0 = max(jnp.max(Z_true[0]), jnp.max(Z[0]))
-    vmax1 = max(jnp.max(Z_true[1]), jnp.max(Z[1]))
-    vmax3 = max(jnp.max(Z_true[3]), jnp.max(Z[3]))
-    
+    hess_idx = [0, 1, 3]
 
-    fig, ax = plt.subplots(3, 3, figsize=figsize)
-    ax[0, 0].set_aspect('equal', adjustable='box')
-    ax[0, 0].set_title("XX stress", fontsize=_FONTSIZE)
-    p1 = ax[0, 0].contourf(X , Y, Z[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
-    plt.colorbar(p1, ax=ax[0, 0])
-
-    ax[0, 1].set_aspect('equal', adjustable='box')
-    ax[0, 1].set_title("XY stress", fontsize=_FONTSIZE)
-    p2 = ax[0, 1].contourf(X, Y, Z[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
-    plt.colorbar(p2, ax=ax[0, 1])
-
-    ax[0, 2].set_aspect('equal', adjustable='box')
-    ax[0, 2].set_title("YY stress", fontsize=_FONTSIZE)
-    p4 = ax[0, 2].contourf(X, Y, Z[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
-    plt.colorbar(p4, ax=ax[0, 2])
+    vmins = [min(jnp.min(Z_true[i]), jnp.min(Z[i])) for i in hess_idx]
+    vmaxs = [max(jnp.max(Z_true[i]), jnp.max(Z[i])) for i in hess_idx]
 
 
-
-    ax[1, 0].set_aspect('equal', adjustable='box')
-    ax[1, 0].set_title("True XX stress", fontsize=_FONTSIZE)
-    p1 = ax[1, 0].contourf(X, Y, Z_true[0], levels=_CLEVELS, vmin=vmin0, vmax=vmax0)
-    plt.colorbar(p1, ax=ax[1, 0])
-
-    ax[1, 1].set_aspect('equal', adjustable='box')
-    ax[1, 1].set_title("True XY stress", fontsize=_FONTSIZE)
-    p2 = ax[1, 1].contourf(X, Y, Z_true[1], levels=_CLEVELS, vmin=vmin1, vmax=vmax1)
-    plt.colorbar(p2, ax=ax[1, 1])
-
-    ax[1, 2].set_aspect('equal', adjustable='box')
-    ax[1, 2].set_title("True YY stress", fontsize=_FONTSIZE)
-    p4 = ax[1, 2].contourf(X, Y, Z_true[3], levels=_CLEVELS, vmin=vmin3, vmax=vmax3)
-    plt.colorbar(p4, ax=ax[1, 2])
+    u = [
+        [Z[i] for i in hess_idx],
+        [Z_true[i] for i in hess_idx],
+        [jnp.abs(Z[i]-Z_true[i]) for i in hess_idx]
+    ]
+    titles = ["XX stress", "XY stress", "YY stress"]
+    all_titles = [
+        titles,
+        ["True " + t for t in titles],
+        ["Abs. error of " + t for t in titles]
+    ]
 
 
+    fig, ax = plt.subplots(3, len(hess_idx), figsize=figsize)
 
-    ax[2, 0].set_aspect('equal', adjustable='box')
-    ax[2, 0].set_title("Abs. error of XX stress", fontsize=_FONTSIZE)
-    p1 = ax[2, 0].contourf(X, Y, jnp.abs(Z[0]-Z_true[0]), levels=_CLEVELS)
-    plt.colorbar(p1, ax=ax[2, 0])
-
-    ax[2, 1].set_aspect('equal', adjustable='box')
-    ax[2, 1].set_title("Abs. error of XY stress", fontsize=_FONTSIZE)
-    p2 = ax[2, 1].contourf(X, Y, jnp.abs(Z[1]-Z_true[1]), levels=_CLEVELS)
-    plt.colorbar(p2, ax=ax[2, 1])
-
-    ax[2, 2].set_aspect('equal', adjustable='box')
-    ax[2, 2].set_title("Abs. error of YY stress", fontsize=_FONTSIZE)
-    p4 = ax[2, 2].contourf(X, Y, jnp.abs(Z[3]-Z_true[3]), levels=_CLEVELS)
-    plt.colorbar(p4, ax=ax[2, 2])
+    for r in range(3):
+        for c, h in enumerate(hess_idx):
+            ax[r, c].set_aspect('auto', adjustable='datalim')
+            ax[r, c].set_title(all_titles[r][c], fontsize=_FONTSIZE)
+            if r < 2:
+                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS, vmin=vmins[c], vmax=vmaxs[c])
+            else:
+                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS)
+            plt.colorbar(p, ax=ax[r, c])
 
     save_fig(fig_dir, name, extension)
     plt.clf()
