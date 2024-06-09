@@ -56,6 +56,7 @@ def parse_arguments() -> dict:
     parser.add_argument("--settings", type=str, required=True)
     args = parser.parse_args()
     json_dict = load_json(args.settings)
+    shutil.copy(args.settings, json_dict["io"]["log_dir"] + '/' + json_dict["id"])
     return json_dict
 
 
