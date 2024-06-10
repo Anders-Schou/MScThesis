@@ -173,6 +173,7 @@ class TrainingSettings(Settings):
     decay_rate: float | None = None
     decay_steps: int | None = None
     transfer_learning: bool = False
+    checkpoint_every: int | None = None
     resampling: dict | None = None
     jitted_update: bool = True
 

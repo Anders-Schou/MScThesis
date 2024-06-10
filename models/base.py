@@ -88,6 +88,9 @@ class Model(metaclass=ABCMeta):
         if self.logging.do_logging:
             log_settings(settings, self.dir.log_dir, tensorboard=True, text_file=False, empty_dir=False)
         
+        if self.train_settings.checkpoint_every is not None:
+            self.write_model(init=True)
+        
         if settings.get("description"):
             with open(self.dir.log_dir / "description.txt", "a+") as file:
                 file.writelines([settings["description"], "\n\n"])
@@ -177,15 +180,20 @@ class Model(metaclass=ABCMeta):
             self.params = load_model(step, dir)
         return
         
-    def write_model(self, step: int | None = None, dir: str | None = None):
+    def write_model(self, step: int | None = None, dir: str | None = None, init: bool = False):
         """
         Save model state. Call to a more general function write_model() ...
         """
         if dir is None:
             dir = self.dir.model_dir
         
+        if init:
+            write_model(None, None, dir, init=init)
+            return
+        
         if step is not None:
             write_model(self.params, step, dir)
+            return
             
         try: 
             self.train_settings.iterations

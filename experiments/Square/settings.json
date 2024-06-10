@@ -31,9 +31,10 @@
             "sampling": {
                 "coll": 4000,
                 "rect": [500, 500, 500, 500],
-                "data": 4000
+                "data": 4000,
+                "do_plots": true
             },
-            "iterations": 100,
+            "iterations": 50000,
             "optimizer": "adam",
             "loss_fn": "mse",
             "update_scheme": "softadapt",
@@ -64,6 +65,7 @@
             "decay_rate": 0.99,
             "decay_steps": 2000,
             "transfer_learning": false,
+            "checkpoint_every": 5000,
             "resampling": {
                 "do_resampling": false,
                 "resample_steps": 5000,
@@ -79,7 +81,6 @@
             "sampling": {
                 "coll": 200,
                 "rect": [50, 50, 50, 50],
-                "circ": 100,
                 "data": 50
             }
         }
@@ -122,8 +123,8 @@
                     "color": "green",
                     "s": 5
                 },
-                "circ": {
-                    "color": "red",
+                "data": {
+                    "color": "orange",
                     "s": 5
                 }
             }

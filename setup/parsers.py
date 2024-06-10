@@ -390,6 +390,10 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     # transfer_learning
     if settings_dict.get("transfer_learning") is not None:
         settings.transfer_learning = settings_dict["transfer_learning"]
+        
+    # Checkpointer
+    if settings_dict.get("checkpoint_every") is not None:
+        settings.checkpoint_every = settings_dict["checkpoint_every"]
     
     # resampling
     if settings_dict.get("resampling") is not None:

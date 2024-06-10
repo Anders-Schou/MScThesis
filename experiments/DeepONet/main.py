@@ -95,7 +95,6 @@ class DeepONet(BiharmonicDeepONet):
             del self.weights
         
         max_epochs = self.train_settings.iterations if epochs is None else epochs
-        plot_every = self.result_plots.plot_every
         log_every = self.logging.log_every
         do_log = self.logging.do_logging
         num_batches = self.train_settings.sampling.get("branch", 1)
@@ -129,12 +128,7 @@ class DeepONet(BiharmonicDeepONet):
                                                                                                 learning_rate=self.schedule(epoch)
                                                                                                 )
             
-            if do_log and epoch % log_every == log_every-1:
-                if epoch // log_every == 0:
-                    self.all_losses = jnp.zeros((0, loss_terms.shape[0]))
-                self.all_losses = self.log_scalars(loss_terms, self.loss_names, all_losses=self.all_losses, log=False)
-            if plot_every and epoch % plot_every == plot_every-1:
-                self.plot_results(save=False, log=True, step=epoch)
+            self.do_every(epoch=epoch, loss_terms=loss_terms)
                 
         if do_log and epoch > log_every:
             self.plot_loss(self.all_losses, {f"{loss_name}": key for key, loss_name in enumerate(self.loss_names)}, fig_dir=self.dir.figure_dir, name="losses.png", epoch_step=log_every)
@@ -153,7 +147,7 @@ if __name__ == "__main__":
     
     t2 = perf_counter()
         
-    f = open(deeponet.dir.log_dir.joinpath('time.dat'), "w+")
+    f = open(deeponet.dir.log_dir.joinpath('time.dat'), "w")
     f.write(f'Time taken for the whole training process: {t2-t1:.1f} s \t or \t {(t2-t1)/60.0:.1f} min\n')
     f.write(f'L2-rel xx error: {deeponet.eval_result["L2-rel"][0, 0]:.4f}\n')
     f.write(f'L2-rel xy error: {deeponet.eval_result["L2-rel"][0, 1]:.4f}\n')

@@ -274,3 +274,27 @@ class PlateWithHoleDeepONet(DeepONet):
         pwhplot.plot_results(self.geometry_settings, self.jitted_hessian, self.params, self.eval_points_branch,
                              self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step, 
                              grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"])
+        
+        
+    def do_every(self, epoch: int | None = None, loss_terms: jax.Array | None = None):
+        
+        plot_every = self.result_plots.plot_every
+        log_every = self.logging.log_every
+        do_log = self.logging.do_logging
+        checkpoint_every = self.train_settings.checkpoint_every
+
+        if do_log and epoch % log_every == log_every-1:
+            if epoch // log_every == 0:
+                self.all_losses = jnp.zeros((0, loss_terms.shape[0]))
+            self.all_losses = self.log_scalars(loss_terms, self.loss_names, all_losses=self.all_losses, log=False)
+
+        if plot_every and epoch % plot_every == plot_every-1:
+            self.plot_results(save=False, log=True, step=epoch)
+
+        if epoch % checkpoint_every == checkpoint_every-1:
+            self.write_model(step=epoch+1)
+            if hasattr(self, "all_losses"):
+                with open(self.dir.log_dir.joinpath('all_losses.npy'), "wb") as f:
+                    jnp.save(f, self.all_losses)
+        
+        return

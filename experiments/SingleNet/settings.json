@@ -1,7 +1,7 @@
 {
-    "id": "006",
+    "id": "015",
     "seed": 1234,
-    "description": "test before pushing", 
+    "description": "10000", 
 
     "io": {
         "base_dir": "/zhome/74/7/147523/MSc/experiments/SingleNet",
@@ -33,9 +33,10 @@
                 "coll": [8000, 0],
                 "rect": [250, 250, 250, 250],
                 "circ": 1000,
-                "data": [0, 0]
+                "data": [0, 0],
+                "do_plots": true
             },
-            "iterations": 1000, 
+            "iterations": 50000, 
             "optimizer": "adam",
             "loss_fn": "mse",
             "update_scheme": "softadapt", 
@@ -66,6 +67,7 @@
             "decay_rate": 1.0,
             "decay_steps": 2000,
             "transfer_learning": false,
+            "checkpoint_every": 5000,
             "resampling": {
                 "do_resampling": false,
                 "resample_steps": 5000,

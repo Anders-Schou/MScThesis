@@ -1,8 +1,15 @@
 import orbax.checkpoint as ocp
+from etils import epath
 
-def write_model(params, step, dir, settings=None):
-    dir = ocp.test_utils.erase_and_create_empty(dir)
-    options = ocp.CheckpointManagerOptions(max_to_keep=2,
+
+def write_model(params, step, dir, init: bool = False):
+    if init:
+        dir = ocp.test_utils.erase_and_create_empty(dir)
+        return
+    else:
+        dir = epath.Path(dir)
+    
+    options = ocp.CheckpointManagerOptions(max_to_keep=1,
                                             create=True)
     mngr = ocp.CheckpointManager(directory=dir,
                                     options=options)
@@ -13,7 +20,7 @@ def write_model(params, step, dir, settings=None):
     
 
 def load_model(step, dir):
-    options = ocp.CheckpointManagerOptions(max_to_keep=2,
+    options = ocp.CheckpointManagerOptions(max_to_keep=1,
                                             create=True)
     mngr = ocp.CheckpointManager(directory=dir,
                                     options=options,

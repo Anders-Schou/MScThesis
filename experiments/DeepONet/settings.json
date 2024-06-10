@@ -71,6 +71,7 @@
             "decay_rate": 1.0,
             "decay_steps": 100,
             "transfer_learning": false,
+            "checkpoint_every": 5000,
             "resampling": {
                 "do_resampling": false,
                 "resample_steps": 5000,
