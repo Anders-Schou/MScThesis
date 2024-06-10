@@ -19,8 +19,7 @@ class DoubleLaplacePINN(PlateWithHolePINN):
     Implementation of a PINN for solving the biharmonic
     equation as a system of two Laplace problems.
     """
-    net_phi: nn.Module
-    net_psi: nn.Module
+    net: nn.Module
     optimizer: optax.GradientTransformation
 
     def __init__(self, settings: dict):
@@ -30,8 +29,7 @@ class DoubleLaplacePINN(PlateWithHolePINN):
         self._set_update(loss_fun_name="_total_loss", optimizer_name="optimizer")
 
         # Only use one network
-        self.net_phi = self.net[0]
-        self.net_psi = self.net[1]
+        self.net = self.net[0]
         self.opt_state = self.optimizer.init(self.params)
         return
     
@@ -42,10 +40,10 @@ class DoubleLaplacePINN(PlateWithHolePINN):
         return self.phi(params, input)
     
     def phi(self, params, input: jax.Array) -> jax.Array:
-        return self.net_phi.apply(params["net0"], input)
+        return self.net.apply(params["net0"], input)[0]
 
     def psi(self, params, input: jax.Array) -> jax.Array:
-        return self.net_psi.apply(params["net1"], input)
+        return self.net.apply(params["net0"], input)[1]
     
     def hessian(self, params, input: jax.Array) -> jax.Array:
         return hessian(self.phi)(params, input)
@@ -61,8 +59,8 @@ class DoubleLaplacePINN(PlateWithHolePINN):
 
         # Return both losses
         if true_val is None:
-            return mse(lap_phi, self.psi(params, input)), ms(lap_psi)
-        return mse(lap_phi, self.psi(params, input)), mse(lap_psi, true_val)
+            return mse(lap_phi, netmap(self.psi)(params, input)), ms(lap_psi)
+        return mse(lap_phi, netmap(self.psi)(params, input)), mse(lap_psi, true_val)
 
     def resample_eval(self,
                       params,
@@ -83,6 +81,3 @@ class DoubleLaplacePINN(PlateWithHolePINN):
         if true_val is None:
             return sqe(lap_phi, self.psi(params, input)) + sq(lap_psi)
         return sqe(lap_phi, self.psi(params, input)) + sqe(lap_psi, true_val)
-
-    def eval(self):
-        pass

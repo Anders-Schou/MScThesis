@@ -1,14 +1,14 @@
 {
-    "id": "013",
+    "id": "001",
     "seed": 1234,
-    "description": "Square",
+    "description": "Initial test", 
 
     "io": {
-        "base_dir": "/zhome/74/7/147523/MSc/experiments/Square",
-        "figure_dir": "/zhome/74/7/147523/MSc/experiments/Square/figures",
-        "model_dir": "/zhome/74/7/147523/MSc/experiments/Square/models",
-        "image_dir": "/zhome/74/7/147523/MSc/experiments/Square/images",
-        "log_dir": "/zhome/74/7/147523/MSc/experiments/Square/logs"
+        "base_dir": "/zhome/74/7/147523/MSc/experiments/SingleNetDoubleLaplace",
+        "figure_dir": "/zhome/74/7/147523/MSc/experiments/SingleNetDoubleLaplace/figures",
+        "model_dir": "/zhome/74/7/147523/MSc/experiments/SingleNetDoubleLaplace/models",
+        "image_dir": "/zhome/74/7/147523/MSc/experiments/SingleNetDoubleLaplace/images",
+        "log_dir": "/zhome/74/7/147523/MSc/experiments/SingleNetDoubleLaplace/logs"
     },
     
     "verbosity": {
@@ -21,22 +21,24 @@
 
     "geometry": {
         "domain": {
-            "rectangle": { "xlim": [-4, 4], "ylim": [-4, 4] },
-            "circle": { "center": [0.0, 0.0], "radius": 2.0 }
+            "rectangle": { "xlim": [-10.0, 10.0], "ylim": [-10.0, 10.0] },
+            "circle": { "center": [0.0, 0.0], "radius": 2.0 },
+            "type": "full"
         }
     },
 
     "run": {
         "train": {
             "sampling": {
-                "coll": 4000,
-                "rect": [500, 500, 500, 500],
-                "data": 4000
+                "coll": [8000, 0],
+                "rect": [250, 250, 250, 250],
+                "circ": 1000,
+                "data": [0, 0]
             },
-            "iterations": 100,
+            "iterations": 50000, 
             "optimizer": "adam",
             "loss_fn": "mse",
-            "update_scheme": "softadapt",
+            "update_scheme": "softadapt", 
             "update_kwargs": {
                 "softadapt": {
                     "order": 4,
@@ -61,13 +63,13 @@
             },
             "learning_rate": 1e-3,
             "batch_size": null,
-            "decay_rate": 0.99,
+            "decay_rate": 1.0,
             "decay_steps": 2000,
             "transfer_learning": false,
             "resampling": {
                 "do_resampling": false,
                 "resample_steps": 5000,
-                "resample_num": 100,
+                "resample_num": [100, 100],
                 "loss_emphasis": 2,
                 "replace": true
             },
@@ -77,10 +79,10 @@
             "error_metric": "L2-rel",
             "transfer_learning": false,
             "sampling": {
-                "coll": 200,
+                "coll": [200, 200],
                 "rect": [50, 50, 50, 50],
                 "circ": 100,
-                "data": 50
+                "data": [50, 10]
             }
         }
     },
@@ -92,7 +94,7 @@
                     "architecture": "mlp",
                     "specifications": {
                         "input_dim": 2,
-                        "output_dim": 1,
+                        "output_dim": 2,
                         "hidden_dims": [128, 128],
                         "activation": "tanh",
                         "initialization": "glorot_normal",
@@ -124,6 +126,10 @@
                 },
                 "circ": {
                     "color": "red",
+                    "s": 5
+                },
+                "data": {
+                    "color": "orange",
                     "s": 5
                 }
             }

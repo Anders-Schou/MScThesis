@@ -116,7 +116,7 @@ class DeepONet(BiharmonicDeepONet):
             
             for batch_num in range(num_batches):
                 # Update step
-                self.params, self.opt_state, total_loss, self.prevlosses = self.update(opt_state=self.opt_state,
+                self.params, self.opt_state, total_loss, loss_terms = self.update(opt_state=self.opt_state,
                                                                                                 params=self.params,
                                                                                                 branch_inputs=self.train_points_branch[batch_num],
                                                                                                 trunk_inputs=self.train_points_trunk[batch_num],
@@ -131,8 +131,8 @@ class DeepONet(BiharmonicDeepONet):
             
             if do_log and epoch % log_every == log_every-1:
                 if epoch // log_every == 0:
-                    self.all_losses = jnp.zeros((0, self.prevlosses.shape[0]))
-                self.all_losses = self.log_scalars(self.prevlosses, self.loss_names, all_losses=self.all_losses, log=False)
+                    self.all_losses = jnp.zeros((0, loss_terms.shape[0]))
+                self.all_losses = self.log_scalars(loss_terms, self.loss_names, all_losses=self.all_losses, log=False)
             if plot_every and epoch % plot_every == plot_every-1:
                 self.plot_results(save=False, log=True, step=epoch)
                 

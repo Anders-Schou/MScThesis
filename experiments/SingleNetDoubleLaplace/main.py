@@ -10,14 +10,14 @@ from flax.linen import Sequential
 
 from models.loss import ms, mse, sq, sqe
 from models.networks import netmap
-from models.platewithhole.pinn import BiharmonicPINN
+from models.platewithhole.pinn import DoubleLaplacePINN
 from setup.parsers import parse_arguments
 from utils.utils import timer
 from utils.checkpoint import write_model, load_model
 
 # jax.config.update("jax_enable_x64", True)
 
-class PINN01(BiharmonicPINN):
+class PINN01(DoubleLaplacePINN):
     def __init__(self, settings: dict):
         super().__init__(settings)
         self._set_loss(loss_term_fun_name="loss_terms")
@@ -75,7 +75,7 @@ class PINN01(BiharmonicPINN):
         # loss_circ = tuple([10*i for i in loss_circ])
         # Return 1D array of all loss values in the following order
         self.loss_names = ["phi"] + [f"rect{i}" for i, _ in enumerate(loss_rect)] + [f"circ{i}" for i, _ in enumerate(loss_circ)]
-        return jnp.array((loss_coll, *loss_rect, *loss_circ))
+        return jnp.array((*loss_coll, *loss_rect, *loss_circ))
 
     def train(self, update_key = None, epochs: int | None = None, new_init: bool = False) -> None:
         """

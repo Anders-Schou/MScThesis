@@ -99,7 +99,9 @@
                         "activation": "tanh",
                         "initialization": "glorot_normal",
                         "embed": null,
+                        "embed2": {"embed_scale": 1.0, "embed_dim": 128},
                         "reparam": null,
+                        "reparam2": {"type": "weight_fact", "mean": 0.5, "stddev": 0.1},
                         "nondim": null
                     }
                 }

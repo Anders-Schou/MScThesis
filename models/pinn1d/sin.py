@@ -79,27 +79,6 @@ class Sin1DPINN(PINN):
             bcloss2 = self.loss2(params, inputs["bc"], true_val=true_val["bc2"], loss_fn=loss_fn)
             bcloss0 = self.loss0(params, inputs["bc"], true_val=true_val["bc0"], loss_fn=loss_fn)
             return jnp.array((loss4, bcloss2, bcloss0))
-        
-        # if update_key == 2:
-        #     loss2 = self.loss2(params, inputs["coll"], true_val=true_val["2"], loss_fn=loss_fn)
-        #     bcloss0 = self.loss0(params, inputs["bc"], true_val=true_val["bc0"], loss_fn=loss_fn)
-        #     bcloss1 = self.loss1(params, inputs["bc"], true_val=true_val["bc1"], loss_fn=loss_fn)
-        #     return jnp.array((loss2, bcloss1, bcloss0))
-
-        # if update_key == 3:
-        #     loss3 = self.loss3(params, inputs["coll"], true_val=true_val["3"], loss_fn=loss_fn)
-        #     bcloss0 = self.loss0(params, inputs["bc"], true_val=true_val["bc0"], loss_fn=loss_fn)
-        #     bcloss1 = self.loss1(params, inputs["bc"], true_val=true_val["bc1"], loss_fn=loss_fn)
-        #     bcloss2 = self.loss2(params, inputs["bc"], true_val=true_val["bc2"], loss_fn=loss_fn)
-        #     return jnp.array((loss3, bcloss2, bcloss1, bcloss0))
-
-        # if update_key == 4:
-        #     loss4 = self.loss4(params, inputs["coll"], true_val=true_val["4"], loss_fn=loss_fn)
-        #     # bcloss0 = self.loss0(params, inputs["bc"], true_val=true_val["bc0"])
-        #     # bcloss1 = self.loss1(params, inputs["bc"], true_val=true_val["bc1"])
-        #     bcloss2 = self.loss2(params, inputs["bc"], true_val=true_val["bc2"], loss_fn=loss_fn)
-        #     # bcloss3 = self.loss3(params, inputs["bc"], true_val=true_val["bc3"])
-        #     return jnp.array((loss4, bcloss2))
 
         loss0 = self.loss0(params, inputs["coll"], true_val=true_val["0"], loss_fn=loss_fn)
         loss1 = self.loss1(params, inputs["coll"], true_val=true_val["1"], loss_fn=loss_fn)
@@ -188,8 +167,6 @@ class Sin1DPINN(PINN):
         self.train_points = {}
         self.eval_points = {}
 
-        # self.train_points["coll"] = jax.random.uniform(train_key, (train_sampling["coll"], 1), minval=xlim[0], maxval=xlim[1])
-        # self.eval_points["coll"] = jax.random.uniform(eval_key, (eval_sampling["coll"], 1), minval=xlim[0], maxval=xlim[1])
         self.train_points["coll"] = generate_interval_points(train_key, xlim, train_sampling["coll"], sobol=True)
         self.eval_points["coll"] = generate_interval_points(eval_key, xlim, eval_sampling["coll"], sobol=True)
         self.train_points["bc"] = jnp.array(xlim).reshape(-1, 1)
@@ -242,15 +219,11 @@ class Sin1DPINN(PINN):
             print("Model is not set to train")
             return
         
-        jitted_eval = jax.jit(self.loss_terms, static_argnames=("update_key", "loss_fn"))
-        
         max_epochs = self.train_settings.iterations
         plot_every = self.result_plots.plot_every
         sample_every = self.train_settings.resampling["resample_steps"]
         do_resample = self.train_settings.resampling["do_resampling"]
 
-        self._init_prevlosses(self.loss_terms, update_key=update_key)
-        
         log_every = self.logging.log_every
         
         # Create arrays for losses for function values and 1st-4th order gradients
@@ -259,42 +232,41 @@ class Sin1DPINN(PINN):
         self.loss_log_epochs = np.arange(0, max_epochs+log_every, log_every)
         # Loss counter
         l = 0
-
+        
+        jitted_loss = jax.jit(self.loss_terms, static_argnames=("update_key", "loss_fn"))
+        
         # Start time
         t0 = perf_counter()
         for epoch in range(max_epochs):
             
-            self.get_weights(self.loss_terms,
-                             update_key=update_key,
-                             type=self.train_settings.update_scheme,
-                             epoch=epoch,
-                             update_weights_every=100)
+            self.get_weights(epoch, 
+                             jitted_loss, 
+                             self.params, 
+                             self.train_points, 
+                             true_val=self.train_true_val, 
+                             update_key=update_key)
+            
             # Update step
-            self.params, self.opt_state, total_loss, self.prevlosses  = self.update(self.opt_state,
-                                                                                    self.params,
-                                                                                    self.train_points,
-                                                                                    true_val=self.train_true_val,
-                                                                                    update_key=update_key,
-                                                                                    prevlosses=self.prevlosses,
-                                                                                    start_time=t0,
-                                                                                    epoch=epoch,
-                                                                                    learning_rate=self.schedule(epoch),
-                                                                                    weights=self.weights
-                                                                                    )
+            self.params, self.opt_state, total_loss, loss_terms = self.update(opt_state=self.opt_state,
+                                                                                             params=self.params,
+                                                                                             inputs=self.train_points,
+                                                                                             weights=self.weights,
+                                                                                             true_val=self.train_true_val,
+                                                                                             update_key=update_key,
+                                                                                             start_time=t0,
+                                                                                             epoch=epoch,
+                                                                                             learning_rate=self.schedule(epoch)
+                                                                                             )
             
             
             if (epoch % log_every == 0):
-                self.loss_log_train[l] = jitted_eval(self.params, self.train_points, true_val=self.train_true_val, update_key=None)
-                self.loss_log_eval[l] = jitted_eval(self.params, self.eval_points, true_val=self.eval_true_val, update_key=None, loss_fn=maxabse)
+                self.loss_log_train[l] = jitted_loss(self.params, self.train_points, true_val=self.train_true_val, update_key=None)
+                self.loss_log_eval[l] = jitted_loss(self.params, self.eval_points, true_val=self.eval_true_val, update_key=None, loss_fn=maxabse)
                 l += 1
         
         # Log latest model loss
-        self.loss_log_train[-1] = jitted_eval(self.params, self.train_points, true_val=self.train_true_val, update_key=None)
-        self.loss_log_eval[-1] = jitted_eval(self.params, self.eval_points, true_val=self.eval_true_val, update_key=None, loss_fn=maxabse)
-            # if do_resample:
-            #     if (epoch % sample_every == (sample_every-1)):
-            #         if epoch < (max_epochs-1):
-            #             self.resample(self.resample_eval)
+        self.loss_log_train[-1] = jitted_loss(self.params, self.train_points, true_val=self.train_true_val, update_key=None)
+        self.loss_log_eval[-1] = jitted_loss(self.params, self.eval_points, true_val=self.eval_true_val, update_key=None, loss_fn=maxabse)
             
         return
 
@@ -361,11 +333,13 @@ class Sin1DPINN(PINN):
         save_fig(self.dir.figure_dir, "diff_true.pdf", format="pdf", fig=fig)
 
         fig = plt.figure()
-        plt.semilogy(xx, jnp.abs(netmap(self.forward)(self.params, xx.reshape(-1, 1)).ravel()-jnp.sin(xx)))
-        plt.semilogy(xx, jnp.abs(netmap(self.grad1  )(self.params, xx.reshape(-1, 1)).ravel()-jnp.cos(xx)))
-        plt.semilogy(xx, jnp.abs(netmap(self.grad2  )(self.params, xx.reshape(-1, 1)).ravel()+jnp.sin(xx)))
-        plt.semilogy(xx, jnp.abs(netmap(self.grad3  )(self.params, xx.reshape(-1, 1)).ravel()+jnp.cos(xx)))
-        plt.semilogy(xx, jnp.abs(netmap(self.grad4  )(self.params, xx.reshape(-1, 1)).ravel()-jnp.sin(xx)))
+        true_vals = self.get_true_vals(xx)
+        
+        plt.semilogy(xx, jnp.abs(netmap(self.forward)(self.params, xx.reshape(-1, 1)).ravel() - true_vals["0"].ravel()))
+        plt.semilogy(xx, jnp.abs(netmap(self.grad1  )(self.params, xx.reshape(-1, 1)).ravel() - true_vals["1"].ravel()))
+        plt.semilogy(xx, jnp.abs(netmap(self.grad2  )(self.params, xx.reshape(-1, 1)).ravel() - true_vals["2"].ravel()))
+        plt.semilogy(xx, jnp.abs(netmap(self.grad3  )(self.params, xx.reshape(-1, 1)).ravel() - true_vals["3"].ravel()))
+        plt.semilogy(xx, jnp.abs(netmap(self.grad4  )(self.params, xx.reshape(-1, 1)).ravel() - true_vals["4"].ravel()))
         plt.legend(["Diff" + str(i) for i in range(5)])
         save_fig(self.dir.figure_dir, "diff_error.pdf", format="pdf", fig=fig)
 

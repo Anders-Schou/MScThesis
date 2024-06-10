@@ -121,6 +121,46 @@ class MLP(nn.Module):
         return s
 
 
+class DoubleMLP(nn.Module):
+    name: str
+    input_dim: int
+    output_dim: int
+    hidden_dims: Sequence[int]
+    activation: Sequence[Callable]
+    initialization: Sequence[Callable]
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
+    polar: bool = False
+
+        
+    @nn.compact
+    def __call__(self, input, transform = None):
+        phi = MLP(name=self.name+"_phi", 
+                           input_dim=self.input_dim, 
+                           output_dim=self.output_dim, 
+                           hidden_dims=self.hidden_dims, 
+                           activation=self.activation,
+                           initialization=self.initialization,
+                           embed=self.embed,
+                           reparam=self.reparam,
+                           nondim=self.nondim,
+                           polar=self.polar
+                           )(input, transform=transform)
+        
+        psi = MLP(name=self.name+"_psi",
+                           input_dim=self.input_dim, 
+                           output_dim=self.output_dim, 
+                           hidden_dims=self.hidden_dims, 
+                           activation=self.activation,
+                           initialization=self.initialization,
+                           embed=self.embed,
+                           reparam=self.reparam,
+                           nondim=self.nondim,
+                           polar=self.polar)(input, transform=transform)
+        return jnp.array([phi, psi])
+
+
 class ModifiedMLP(nn.Module):
     name: str
     input_dim: int
@@ -393,6 +433,10 @@ def setup_network(network_settings: dict[str, str | dict]) -> MLP | ResNetBlock:
         case "dualmlp":
             parsed_settings = parse_MLP_settings(network_settings["specifications"])
             return DualMLP(**parsed_settings)
+        
+        case "doublemlp":
+            parsed_settings = parse_MLP_settings(network_settings["specifications"])
+            return DoubleMLP(**parsed_settings)
 
         case _:
             raise ValueError(f"Invalid network architecture: '{arch}'.")

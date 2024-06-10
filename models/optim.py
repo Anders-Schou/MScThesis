@@ -99,7 +99,7 @@ def _verbose_update(print_every = LoggingSettings.print_every):
         def wrapper(*args, epoch, learning_rate, start_time, weights, **kwargs):
             
             # Call update function
-            params, opt_state, total_loss, aux = update_func(*args, **kwargs)
+            params, opt_state, total_loss, aux = update_func(*args, weights=weights, **kwargs)
             
             if epoch % print_every == 0 and kwargs.get("batch_num", 0) == 0:
                 tcurr = perf_counter()
