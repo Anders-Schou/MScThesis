@@ -16,8 +16,8 @@ from utils.utils import limits2vertices, remove_points, keep_points
 def generate_interval_points(key: jax.random.PRNGKey,
                              xlim: Sequence[float],
                              num_points: int,
-                             sobol: bool = True
-                             ):
+                             sobol: bool = True,
+                             round_up: bool = False):
     
     s_key, key = jax.random.split(key, 2)
     if sobol:
@@ -26,6 +26,9 @@ def generate_interval_points(key: jax.random.PRNGKey,
                                                   jnp.iinfo(jnp.int32).max))
             ).random_base2(math.ceil(jnp.log2(num_points)))
         
+        if not round_up:
+            xp = xp[:num_points]
+
         return jnp.array(xp*(xlim[1]-xlim[0]) + xlim[0])
     
     # Use uniform sampling
@@ -156,13 +159,13 @@ def generate_rectangle_points(key: jax.random.PRNGKey,
         
         case _:
             raise ValueError(f"Unknown domain type: '{domain_type}'.")
-        
 
 
 def generate_circle_points(key: jax.random.PRNGKey,
                            radius: float,
                            num_points: int,
-                           angle_interval: Sequence[float] | None = None
+                           angle_interval: Sequence[float] | None = None,
+                           sobol: bool = True
                            ) -> jax.Array:
     theta_min = 0
     theta_max = 2*jnp.pi
@@ -170,7 +173,11 @@ def generate_circle_points(key: jax.random.PRNGKey,
         theta_min = angle_interval[0]
         theta_max = angle_interval[1]
     
-    theta = jax.random.uniform(key, (num_points, 1), minval=theta_min, maxval=theta_max)
+    if sobol:
+        theta = sample_line(key, (theta_min, theta_max),shape=(num_points, 1))
+    else:
+        theta = jax.random.uniform(key, (num_points, 1), minval=theta_min, maxval=theta_max)
+    
     xc = radius*jnp.cos(theta)
     yc = radius*jnp.sin(theta)
     xyc = jnp.stack([xc, yc], axis=1).reshape((-1,2))
@@ -181,7 +188,8 @@ def generate_collocation_points(key: jax.random.PRNGKey,
                                 xlim: Sequence[float],
                                 ylim: Sequence[float],
                                 num_coll: int,
-                                sobol: bool = True) -> jax.Array:
+                                sobol: bool = True,
+                                round_up: bool = False) -> jax.Array:
     if num_coll <= 0:
         return jnp.empty((0, 2))
     
@@ -194,6 +202,10 @@ def generate_collocation_points(key: jax.random.PRNGKey,
         
         xp[:, 0] = xp[:, 0]*(xlim[1]-xlim[0]) + xlim[0]
         xp[:, 1] = xp[:, 1]*(ylim[1]-ylim[0]) + ylim[0]
+
+        if not round_up:
+            xp = xp[:num_coll]
+
         return jnp.array(xp)
     
     # Uniform sampling
@@ -294,14 +306,14 @@ def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
 
     # Initial coll point gen
     key, key_coll = jax.random.split(key)
-    xy_coll = generate_collocation_points(key_coll, xlim, ylim, num_coll, sobol=sobol)
+    xy_coll = generate_collocation_points(key_coll, xlim, ylim, num_coll, sobol=sobol, round_up=True)
     xy_coll = remove_points(xy_coll, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
     
     # Filler coll point gen
     pnum = xy_coll.shape[0]
     while pnum < num_coll:
         key, key_coll = jax.random.split(key_coll)
-        tmp = generate_collocation_points(key_coll, xlim, ylim, num_coll, sobol=sobol)
+        tmp = generate_collocation_points(key_coll, xlim, ylim, num_coll, sobol=sobol, round_up=True)
         tmp = remove_points(tmp, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
         xy_coll = jnp.concatenate((xy_coll, tmp))
         pnum = xy_coll.shape[0]
@@ -440,6 +452,38 @@ def resample_idx(new_arr: jax.Array, new_loss: jax.Array, num_throwaway: int):
     num_throwaway = min(num_throwaway, new_loss.ravel().shape[0])
     idx = jnp.argpartition(new_loss.ravel(), kth=-num_throwaway)
     return idx[:num_throwaway]
+
+
+class JaxDataset:
+    def __init__(self, key, xy, u, batch_size):
+        self.key, key = jax.random.split(key, 2)
+        self.xy = jax.random.permutation(key, xy, axis=0)
+        self.u = jax.random.permutation(key, u, axis=0)
+        self.count = 0
+        self.batch_size = batch_size
+        return
+
+    def _permute(self):
+        self.key, key = jax.random.split(self.key, 2)
+        self.xy = jax.random.permutation(key, self.xy, axis=0)
+        self.u = jax.random.permutation(key, self.u, axis=0)
+        self.count = 0
+        return
+
+    def __len__(self):
+        return self.xy.shape[0]
+    
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.count+self.batch_size  >= len(self):
+            self._permute()
+            raise StopIteration
+        
+        batch = tuple(arr[self.count:self.count+self.batch_size] for arr in [self.xy, self.u])
+        self.count += self.batch_size
+        return batch
 
 
 

@@ -46,3 +46,19 @@ for i in range(2):
     ax.set_yticks([])
     ax.set_yticklabels([])
     save_fig("figures", fignames[i], "pdf", fig=fig)
+
+s2 = jnp.sort(s)
+
+for i in range(2):
+    fig = plt.figure(figsize=(10, 5))
+    ax = plt.gca()
+    ax.plot(s2, f[i](s2), color="k")
+    ax.scatter(s2, f[i](s2), color="k")
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
+    ax.set_aspect("auto", adjustable="box")
+    ax.set_xticks([lims[0], 0, lims[-1]])
+    ax.set_xticklabels([r"$-\pi$", "0", r"$\pi$"], fontsize=25)
+    ax.set_yticks([])
+    ax.set_yticklabels([])
+    save_fig("figures", fignames[i] + "-interpolation", "pdf", fig=fig)

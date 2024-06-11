@@ -33,6 +33,7 @@ def mae(u: jax.Array, u_true: jax.Array | None = None):
         return ma(u)
     return ma(jnp.subtract(u.ravel(), u_true.ravel()))
 
+
 def maxabse(u: jax.Array, u_true: jax.Array | None = None):
     if u_true is None:
         return jnp.max(jnp.abs(u))
@@ -40,7 +41,7 @@ def maxabse(u: jax.Array, u_true: jax.Array | None = None):
 
 
 def L2rel(u: jax.Array, u_true: jax.Array):
-    return jnp.sqrt(jnp.divide(mse(u, u_true), ms(u_true)))
+    return jnp.sqrt(jnp.divide(mse(u, u_true), ms(u_true))) # means of num/denom cancel
 
 
 def _norme(u: jax.Array, u_true: jax.Array | None = None, order = 2):
