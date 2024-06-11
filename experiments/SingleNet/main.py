@@ -110,19 +110,26 @@ class PINN01(BiharmonicPINN):
                              true_val=self.train_true_val, 
                              update_key=update_key)
             
-            # Update step
-            self.params, self.opt_state, total_loss, loss_terms = self.update(opt_state=self.opt_state,
-                                                                                             params=self.params,
-                                                                                             inputs=self.train_points,
-                                                                                             weights=self.weights,
-                                                                                             true_val=self.train_true_val,
-                                                                                             update_key=update_key,
-                                                                                             start_time=t0,
-                                                                                             epoch=epoch,
-                                                                                             learning_rate=self.schedule(epoch)
-                                                                                             )
+            for batch_num, (xy_batch, u_batch) in enumerate(iter(self.full_batch_dataset)):
+                
+                self.train_points_batch["coll"] = xy_batch
+                self.train_true_val_batch["coll"] = u_batch
+                
+                # Update step
+                self.params, self.opt_state, total_loss, loss_terms = self.update(opt_state=self.opt_state,
+                                                                                                params=self.params,
+                                                                                                inputs=self.train_points_batch,
+                                                                                                weights=self.weights,
+                                                                                                true_val=self.train_true_val_batch,
+                                                                                                update_key=update_key,
+                                                                                                start_time=t0,
+                                                                                                epoch=epoch,
+                                                                                                learning_rate=self.schedule(epoch),
+                                                                                                batch_num=batch_num
+                                                                                                )
             
-            self.do_every(epoch=epoch, loss_terms=loss_terms)
+            
+            self.do_every(epoch=epoch, loss_term_fun=jitted_loss, params=self.params, inputs=self.train_points, true_val=self.train_true_val, update_key=update_key)
         
         if do_log and epoch > log_every:
             self.plot_loss(self.all_losses, {f"{loss_name}": key for key, loss_name in enumerate(self.loss_names)}, fig_dir=self.dir.figure_dir, name="losses.png", epoch_step=log_every)

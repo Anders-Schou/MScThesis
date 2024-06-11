@@ -458,7 +458,10 @@ class JaxDataset:
     def __init__(self, key, xy, u, batch_size):
         self.key, key = jax.random.split(key, 2)
         self.xy = jax.random.permutation(key, xy, axis=0)
-        self.u = jax.random.permutation(key, u, axis=0)
+        if u is not None:
+            self.u = jax.random.permutation(key, u, axis=0)
+        else:
+            self.u = None
         self.count = 0
         self.batch_size = batch_size
         return
@@ -466,7 +469,8 @@ class JaxDataset:
     def _permute(self):
         self.key, key = jax.random.split(self.key, 2)
         self.xy = jax.random.permutation(key, self.xy, axis=0)
-        self.u = jax.random.permutation(key, self.u, axis=0)
+        if self.u is not None:
+            self.u = jax.random.permutation(key, self.u, axis=0)
         self.count = 0
         return
 
@@ -481,7 +485,10 @@ class JaxDataset:
             self._permute()
             raise StopIteration
         
-        batch = tuple(arr[self.count:self.count+self.batch_size] for arr in [self.xy, self.u])
+        if self.u is not None:
+            batch = tuple(arr[self.count:self.count+self.batch_size] for arr in [self.xy, self.u])
+        else:
+            batch = tuple([self.xy[self.count:self.count+self.batch_size], None])
         self.count += self.batch_size
         return batch
 

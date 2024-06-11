@@ -1,5 +1,5 @@
 {
-    "id": "015",
+    "id": "016",
     "seed": 1234,
     "description": "10000", 
 
@@ -36,10 +36,10 @@
                 "data": [0, 0],
                 "do_plots": true
             },
-            "iterations": 50000, 
+            "iterations": 20000, 
             "optimizer": "adam",
             "loss_fn": "mse",
-            "update_scheme": "softadapt", 
+            "update_scheme": "unweighted", 
             "update_kwargs": {
                 "softadapt": {
                     "order": 4,
@@ -63,11 +63,11 @@
                 }
             },
             "learning_rate": 1e-3,
-            "batch_size": null,
+            "batch_size": 256,
             "decay_rate": 1.0,
             "decay_steps": 2000,
             "transfer_learning": false,
-            "checkpoint_every": 5000,
+            "checkpoint_every": 1000,
             "resampling": {
                 "do_resampling": false,
                 "resample_steps": 5000,

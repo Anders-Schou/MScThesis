@@ -63,7 +63,7 @@
                 }
             },
             "learning_rate": 1e-3,
-            "batch_size": null,
+            "batch_size": 256,
             "decay_rate": 1.0,
             "decay_steps": 2000,
             "transfer_learning": false,

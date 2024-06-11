@@ -10,7 +10,8 @@ from datahandlers.generators import (
     generate_collocation_points_with_hole,
     generate_extra_points,
     resample,
-    resample_idx
+    resample_idx,
+    JaxDataset
 )
 from models import PINN
 from models.derivatives import hessian
@@ -211,7 +212,7 @@ class PlateWithHolePINN(PINN):
         Method used for sampling points on boundaries and in domain.
         """
 
-        self._key, train_key, eval_key = jax.random.split(self._key, 3)
+        self._key, train_key, eval_key, dataset_key = jax.random.split(self._key, 4)
         radius = self.geometry_settings["domain"]["circle"]["radius"]
         xlim = self.geometry_settings["domain"]["rectangle"]["xlim"]
         ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
@@ -282,7 +283,12 @@ class PlateWithHolePINN(PINN):
             self.eval_true_val["coll"]       = None if (c:=self.eval_true_val["coll"]) is None else c[:eval_coll_points ]
             # self.eval_true_val["data_extra"] = None if (c:=self.eval_true_val["data"]) is None else c[:,  eval_coll_points:]
             # self.eval_true_val["data"]       = None if (c:=self.eval_true_val["data"]) is None else c[:, :eval_coll_points ]
-            
+                
+        self.full_batch_dataset = JaxDataset(key=dataset_key, xy=self.train_points["coll"], u=self.train_true_val["coll"], batch_size=self.train_settings.batch_size)
+        
+        self.train_points_batch = self.train_points.copy()
+        self.train_true_val_batch = self.train_true_val.copy()
+        
         if self.sample_plots.do_plots:
             self.plot_training_points()
             
@@ -432,7 +438,7 @@ class PlateWithHolePINN(PINN):
                              grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"])
         
         
-    def do_every(self, epoch: int | None = None, loss_terms: jax.Array | None = None):
+    def do_every(self, epoch: int | None = None, loss_term_fun: Callable | None = None, **kwargs):
         
         max_epochs = self.train_settings.iterations
         plot_every = self.result_plots.plot_every
@@ -443,6 +449,7 @@ class PlateWithHolePINN(PINN):
         checkpoint_every = self.train_settings.checkpoint_every
 
         if do_log and epoch % log_every == log_every-1:
+            loss_terms = loss_term_fun(**kwargs)
             if epoch // log_every == 0:
                 self.all_losses = jnp.zeros((0, loss_terms.shape[0]))
             self.all_losses = self.log_scalars(loss_terms, self.loss_names, all_losses=self.all_losses, log=False)

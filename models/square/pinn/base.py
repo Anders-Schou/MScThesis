@@ -9,7 +9,8 @@ from datahandlers.generators import (
     generate_rectangle,
     generate_collocation_points,
     resample,
-    resample_idx
+    resample_idx,
+    JaxDataset
 )
 from models import PINN
 from models.derivatives import hessian
@@ -159,7 +160,7 @@ class SquarePINN(PINN):
         Method used for sampling points on boundaries and in domain.
         """
 
-        self._key, train_key, eval_key = jax.random.split(self._key, 3)
+        self._key, train_key, eval_key, dataset_key = jax.random.split(self._key, 4)
         xlim = self.geometry_settings["domain"]["rectangle"]["xlim"]
         ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
         train_sampling = self.train_settings.sampling if self.do_train is not None else None
@@ -183,7 +184,12 @@ class SquarePINN(PINN):
         # Get corresponding function values
         self.train_true_val = analytic.get_true_vals(self.train_points)
         self.eval_true_val = analytic.get_true_vals(self.eval_points)
-                
+        
+        self.full_batch_dataset = JaxDataset(key=dataset_key, xy=self.train_points["coll"], u=self.train_true_val["coll"], batch_size=self.train_settings.batch_size)
+        
+        self.train_points_batch = self.train_points.copy()
+        self.train_true_val_batch = self.train_true_val.copy()
+        
         if self.sample_plots.do_plots:
             self.plot_training_points()    
             
@@ -229,7 +235,7 @@ class SquarePINN(PINN):
                              self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step, 
                              grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"])
         
-    def do_every(self, epoch: int | None = None, loss_terms: jax.Array | None = None):
+    def do_every(self, epoch: int | None = None, loss_term_fun: Callable | None = None, **kwargs):
         
         plot_every = self.result_plots.plot_every
         log_every = self.logging.log_every
@@ -237,6 +243,7 @@ class SquarePINN(PINN):
         checkpoint_every = self.train_settings.checkpoint_every
 
         if do_log and epoch % log_every == log_every-1:
+            loss_terms = loss_term_fun(**kwargs)
             if epoch // log_every == 0:
                 self.all_losses = jnp.zeros((0, loss_terms.shape[0]))
             self.all_losses = self.log_scalars(loss_terms, self.loss_names, all_losses=self.all_losses, log=False)
