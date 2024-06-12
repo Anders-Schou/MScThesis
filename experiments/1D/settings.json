@@ -1,13 +1,23 @@
 {
     "id": "1001",
     "seed": 1234,
+    "description": "1D experiments",
+    "update_key": 5,
 
     "io": {
-        "base_dir": "/zhome/74/7/147523/MSc/experiments/1DSin",
-        "figure_dir": "/zhome/74/7/147523/MSc/experiments/1DSin/figures",
-        "model_dir": "/zhome/74/7/147523/MSc/experiments/1DSin/models",
-        "image_dir": "/zhome/74/7/147523/MSc/experiments/1DSin/images",
-        "log_dir": "/zhome/74/7/147523/MSc/experiments/1DSin/logs"
+        "base_dir": "/zhome/74/7/147523/MSc/experiments/1D/Sin",
+        "figure_dir": "/zhome/74/7/147523/MSc/experiments/1D/Sin/figures",
+        "model_dir": "/zhome/74/7/147523/MSc/experiments/1D/Sin/models",
+        "image_dir": "/zhome/74/7/147523/MSc/experiments/1D/Sin/images",
+        "log_dir": "/zhome/74/7/147523/MSc/experiments/1D/Sin/logs"
+    },
+
+    "io2": {
+        "base_dir": "/zhome/74/7/147523/MSc/experiments/1D/ExpSin",
+        "figure_dir": "/zhome/74/7/147523/MSc/experiments/1D/ExpSin/figures",
+        "model_dir": "/zhome/74/7/147523/MSc/experiments/1D/ExpSin/models",
+        "image_dir": "/zhome/74/7/147523/MSc/experiments/1D/ExpSin/images",
+        "log_dir": "/zhome/74/7/147523/MSc/experiments/1D/ExpSin/logs"
     },
 
     "geometry": {
@@ -19,24 +29,31 @@
     "run": {
         "train": {
             "sampling": {
-                "coll": 100
+                "coll": 10000
             },
-            "iterations": 20000,
+            "iterations": 50000,
             "optimizer": "adam",
-            "update_scheme": "softadapt",
+            "update_scheme": "unweighted", 
             "update_kwargs": {
                 "softadapt": {
                     "order": 4,
                     "beta": 0.1,
-                    "loss_weighted": false,
-                    "normalized": false
+                    "loss_weighted": true,
+                    "normalized": false,
+                    "update_every": 10,
+                    "running_average": 0.9
+                },
+                "gradnorm": {
+                    "normalized": true,
+                    "update_every": 10,
+                    "running_average": 0.9
                 },
                 "unweighted": {
-                    "normalized": true,
-                    "save_last": 5
+                    "normalized": true
                 },
                 "weighted": {
-                    "weights": [5, 5, 2]
+                    "weights": [5, 5, 2],
+                    "normalized": false
                 }
             },
             "learning_rate": 5e-3,
@@ -70,7 +87,7 @@
                     "specifications": {
                         "input_dim": 1,
                         "output_dim": 1,
-                        "hidden_dims": [128],
+                        "hidden_dims": [32, 32],
                         "activation": "tanh",
                         "initialization": "glorot_normal"
                     }
