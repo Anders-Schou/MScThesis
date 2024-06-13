@@ -1,0 +1,17 @@
+Time taken for the whole training process: 354.9 s 	 or 	 5.9 min
+Did not converge to a tol of 0.01 in 150000 epochs
+mse error 0: 0.00006319
+mse error 1: 0.00000195
+mse error 2: 0.00000024
+mse error 3: 0.00000067
+mse error 4: 0.00015562
+maxabse error 0: 0.01230547
+maxabse error 1: 0.00246501
+maxabse error 2: 0.00132620
+maxabse error 3: 0.00512558
+maxabse error 4: 0.12889612
+L2rel error 0: 0.01152655
+L2rel error 1: 0.00192593
+L2rel error 2: 0.00070849
+L2rel error 3: 0.00113329
+L2rel error 4: 0.01808910

@@ -1,7 +1,7 @@
 {
-    "id": "1001",
+    "id": "PINN",
     "seed": 1234,
-    "description": "1D experiments",
+    "description": "PINN Tests",
     "update_key": 5,
 
     "io": {
@@ -31,7 +31,8 @@
             "sampling": {
                 "coll": 10000
             },
-            "iterations": 50000,
+            "iterations": 150000,
+            "early_stop_tol": 1e-2,
             "optimizer": "adam",
             "update_scheme": "unweighted", 
             "update_kwargs": {
@@ -49,16 +50,16 @@
                     "running_average": 0.9
                 },
                 "unweighted": {
-                    "normalized": true
+                    "normalized": false
                 },
                 "weighted": {
                     "weights": [5, 5, 2],
                     "normalized": false
                 }
             },
-            "learning_rate": 5e-3,
+            "learning_rate": 1e-3,
             "batch_size": null,
-            "decay_rate": 0.90,
+            "decay_rate": 0.95,
             "decay_steps": 2000,
             "transfer_learning": false,
             "resampling": {
@@ -87,7 +88,7 @@
                     "specifications": {
                         "input_dim": 1,
                         "output_dim": 1,
-                        "hidden_dims": [32, 32],
+                        "hidden_dims": [32, 32, 32, 32],
                         "activation": "tanh",
                         "initialization": "glorot_normal"
                     }
