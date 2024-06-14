@@ -374,8 +374,9 @@ def parse_training_settings(settings_dict: dict) -> TrainingSettings:
     
     # batch_size
     if settings_dict.get("batch_size") is not None:
-        check_pos_int(settings_dict["batch_size"], "batch_size")
-        settings.batch_size = settings_dict["batch_size"]
+        if settings_dict["batch_size"] != -1:
+            check_pos_int(settings_dict["batch_size"], "batch_size")
+            settings.batch_size = settings_dict["batch_size"]
     
     # decay_rate
     if settings_dict.get("decay_rate") is not None:

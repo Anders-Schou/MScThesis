@@ -463,7 +463,10 @@ class JaxDataset:
         else:
             self.u = None
         self.count = 0
-        self.batch_size = batch_size
+        if batch_size is None:
+            self.batch_size = self.xy.shape[0]
+        else:
+            self.batch_size = batch_size
         return
 
     def _permute(self):
@@ -481,7 +484,7 @@ class JaxDataset:
         return self
 
     def __next__(self):
-        if self.count+self.batch_size  >= len(self):
+        if self.count+self.batch_size  > len(self):
             self._permute()
             raise StopIteration
         
