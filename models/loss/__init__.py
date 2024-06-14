@@ -14,6 +14,6 @@ from ._utils import (
     mae,
     maxabse,
     pnorm,
-    L2rel,
+    Lp_rel,
     running_average
 )
