@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import rc
+
 import jax
 import jax.numpy as jnp
 
@@ -23,9 +25,10 @@ from utils.transforms import (
 
 _DEFAULT_RADIUS = 2
 _DEFAULT_CIRCLE_RES = 100
-_CLEVELS = 101
+_CLEVELS = 501
 _FONTSIZE = 40
-
+_LABELSIZE = 40
+_TICKLABELSIZE = 25
 
 
 def plot_loss(
@@ -58,7 +61,7 @@ def plot_loss(
             ax[i].semilogy(loss_arr[:, loss_map[plot_split[i]]], linewidth=5)
             ax[i].tick_params(axis='x', labelsize=_FONTSIZE)
             ax[i].tick_params(axis='y', labelsize=_FONTSIZE)
-        
+
     save_fig(fig_dir, name, extension, fig=fig)
     plt.clf()
     return
@@ -87,6 +90,8 @@ def get_plot_data(geometry_settings, hessian, params, grid, **kwargs):
 
     # List and reshape the four components
     sigma_cart_list = [sigma_cart[:, i].reshape(X.shape)*(xy2r(X, Y) >= radius) for i in range(4)]
+    # To plot without circle mask
+    # sigma_cart_list = [sigma_cart[:, i].reshape(X.shape) for i in range(4)]
 
     # Repeat for the other set of points (polar coords converted to cartesian coords)
     phi_pp2 = netmap(hessian)(params, plotpoints2).reshape(-1, 4)
@@ -145,65 +150,85 @@ def plot_potential(X, Y, Z, *, fig_dir, name,
 
 
 def plot_stress(X, Y, Z, Z_true, *, fig_dir, name,
-                extension="png",
+                extension = "png",
                 radius = _DEFAULT_RADIUS,
                 circle_res = _DEFAULT_CIRCLE_RES,
                 angle = None,
-                figsize = (35, 30)):
+                figsize = (25, 30)):
     """
     Function for plotting stresses in cartesian coordinates.
     """
+    rc("text", usetex=True)
+    rc('text.latex', preamble=r'\usepackage{amsmath}')
     hess_idx = [0, 1, 3]
 
     vmins = [min(jnp.min(Z_true[i]), jnp.min(Z[i])) for i in hess_idx]
     vmaxs = [max(jnp.max(Z_true[i]), jnp.max(Z[i])) for i in hess_idx]
-
-
+    
     u = [
         [Z[i] for i in hess_idx],
         [Z_true[i] for i in hess_idx],
-        [jnp.abs(Z[i]-Z_true[i]) for i in hess_idx]
+        [jnp.abs(Z[i]-Z_true[i])*(xy2r(X, Y) >= radius) for i in hess_idx]
     ]
-    titles = ["XX stress", "XY stress", "YY stress"]
-    all_titles = [
-        titles,
-        ["True " + t for t in titles],
-        ["Abs. error of " + t for t in titles]
-    ]
+    all_titles = [[
+        r"Prediction ($\sigma_{xx}$)",
+        r"Prediction ($\sigma_{xy}$)",
+        r"Prediction ($\sigma_{yy}$)"
+    ], [
+        r"True solution ($\sigma_{xx}$)",
+        r"True solution ($\sigma_{xy}$)",
+        r"True solution ($\sigma_{yy}$)"
+    ], [
+        r"Absolute error ($\sigma_{xx}$)",
+        r"Absolute error ($\sigma_{xy}$)",
+        r"Absolute error ($\sigma_{yy}$)"
+    ]]
 
+    include = [0, 2]
 
-    fig, ax = plt.subplots(3, len(hess_idx), figsize=figsize)
-
-    for r in range(3):
-        for c, h in enumerate(hess_idx):
-            ax[r, c].set_aspect('auto', adjustable='datalim')
-            ax[r, c].set_title(all_titles[r][c], fontsize=_FONTSIZE)
-            if r < 2:
-                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS, vmin=vmins[c], vmax=vmaxs[c])
+    fig, ax = plt.subplots(len(hess_idx), len(include), figsize=figsize)
+    for r, h in enumerate(hess_idx):
+        for c, cc in enumerate(include):
+            ax[r, c].set_aspect('equal', adjustable='box')
+            ax[r, c].set_title(all_titles[cc][r], fontsize=_FONTSIZE, pad=20)
+            if cc < 2:
+                p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
             else:
-                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS)
-            plt.colorbar(p, ax=ax[r, c])
+                p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
+            ax[r, c].set_xlabel(r"$x$", fontsize=_LABELSIZE)
+            ax[r, c].set_ylabel(r"$y$", rotation=0, fontsize=_LABELSIZE)
+            ax[r, c].set_xticks([-10., -5., 0., 5., 10.])
+            ax[r, c].set_yticks([-10., -5., 0., 5., 10.])
+            ax[r, c].set_xticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
+            ax[r, c].set_yticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
+            ax[r, c].add_patch(plt.Circle((0, 0), radius=radius+0.05, color="#777777"))
+            cbar = plt.colorbar(p, ax=ax[r, c])
+            cbar.ax.tick_params(labelsize=_TICKLABELSIZE)
 
-    [plot_circle(ax[i, j], radius, circle_res, angle=angle, color="red") for i in range(3) for j, _ in enumerate(hess_idx)]
+    #[plot_circle(ax[i, j], radius, circle_res, angle=angle, color="red", linewidth=1.5) for j, _ in enumerate(include) for i, _ in enumerate(hess_idx)]
+    fig.tight_layout(pad=3.0)
     save_fig(fig_dir, name, extension)
     plt.clf()
     return
     
 
 def plot_polar_stress(X, Y, Z, Z_true, *, fig_dir, name, 
-                      extension="png", 
-                      figsize=(35, 30)):
+                      extension = "png", 
+                      figsize = (30, 30)):
     """
     Function for plotting stresses in polar coordinates.
     """
-
-    vmin0 = min(jnp.min(Z_true[0]),jnp.min(Z[0]))
-    vmin1 = min(jnp.min(Z_true[1]),jnp.min(Z[1]))
-    vmin3 = min(jnp.min(Z_true[3]),jnp.min(Z[3]))
     
-    vmax0 = max(jnp.max(Z_true[0]), jnp.max(Z[0]))
-    vmax1 = max(jnp.max(Z_true[1]), jnp.max(Z[1]))
-    vmax3 = max(jnp.max(Z_true[3]), jnp.max(Z[3]))
+    rc("text", usetex=True)
+    rc('text.latex', preamble=r'\usepackage{amsmath}')
+
+    # vmin0 = min(jnp.min(Z_true[0]),jnp.min(Z[0]))
+    # vmin1 = min(jnp.min(Z_true[1]),jnp.min(Z[1]))
+    # vmin3 = min(jnp.min(Z_true[3]),jnp.min(Z[3]))
+    
+    # vmax0 = max(jnp.max(Z_true[0]), jnp.max(Z[0]))
+    # vmax1 = max(jnp.max(Z_true[1]), jnp.max(Z[1]))
+    # vmax3 = max(jnp.max(Z_true[3]), jnp.max(Z[3]))
     
     hess_idx = [0, 1, 3]
 
@@ -216,26 +241,41 @@ def plot_polar_stress(X, Y, Z, Z_true, *, fig_dir, name,
         [Z_true[i] for i in hess_idx],
         [jnp.abs(Z[i]-Z_true[i]) for i in hess_idx]
     ]
-    titles = ["RR stress", "RT stress", "TT stress"]
-    all_titles = [
-        titles,
-        ["True " + t for t in titles],
-        ["Abs. error of " + t for t in titles]
-    ]
+    all_titles = [[
+        r"Prediction ($\sigma_{rr}$)",
+        r"Prediction ($\sigma_{r\theta}$)",
+        r"Prediction ($\sigma_{\theta\theta}$)"
+    ], [
+        r"True solution ($\sigma_{rr}$)",
+        r"True solution ($\sigma_{r\theta}$)",
+        r"True solution ($\sigma_{\theta\theta}$)"
+    ], [
+        r"Absolute error ($\sigma_{rr}$)",
+        r"Absolute error ($\sigma_{r\theta}$)",
+        r"Absolute error ($\sigma_{\theta\theta}$)"
+    ]]
 
+    include = [0, 2]
 
-    fig, ax = plt.subplots(3, len(hess_idx), figsize=figsize)
-
-    for r in range(3):
-        for c, h in enumerate(hess_idx):
-            ax[r, c].set_aspect('auto', adjustable='datalim')
-            ax[r, c].set_title(all_titles[r][c], fontsize=_FONTSIZE)
-            if r < 2:
-                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS, vmin=vmins[c], vmax=vmaxs[c])
+    fig, ax = plt.subplots(len(hess_idx), len(include), figsize=figsize)
+    for r, h in enumerate(hess_idx):
+        for c, cc in enumerate(include):
+            ax[r, c].set_aspect('equal', adjustable='box')
+            ax[r, c].set_title(all_titles[cc][r], fontsize=_FONTSIZE, pad=20)
+            if cc < 2:
+                p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
             else:
-                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS)
-            plt.colorbar(p, ax=ax[r, c])
-            
+                p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
+            ax[r, c].set_xlabel(r"$r$", fontsize=_LABELSIZE)
+            ax[r, c].set_ylabel(r"$\theta$", rotation=0, fontsize=_LABELSIZE)
+            ax[r, c].set_xticks([2., 4., 6., 8., 10.])
+            ax[r, c].set_yticks([0., 0.5*jnp.pi, jnp.pi, 1.5*jnp.pi, 2.*jnp.pi])
+            ax[r, c].set_xticklabels([r"$2$", r"$4$", r"$6$", r"$8$", r"$10$"], fontsize=_TICKLABELSIZE)
+            ax[r, c].set_yticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"], fontsize=_TICKLABELSIZE)
+            cbar = plt.colorbar(p, ax=ax[r, c])
+            cbar.ax.tick_params(labelsize=_TICKLABELSIZE)
+
+    fig.tight_layout(pad=3.0)
     save_fig(fig_dir, name, extension)
 
     plt.clf()

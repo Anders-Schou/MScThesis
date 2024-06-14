@@ -121,6 +121,82 @@ class MLP(nn.Module):
         return s
 
 
+class PoissonAnsatzMLP(nn.Module):
+    name: str
+    input_dim: int
+    output_dim: int
+    hidden_dims: Sequence[int]
+    activation: Sequence[Callable]
+    initialization: Sequence[Callable]
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
+    polar: bool = False
+
+    @nn.compact
+    def __call__(self, input, transform = None):
+        y = input
+        x = MLP(name=self.name+"_phi", 
+                input_dim=self.input_dim, 
+                output_dim=self.output_dim, 
+                hidden_dims=self.hidden_dims, 
+                activation=self.activation,
+                initialization=self.initialization,
+                embed=self.embed,
+                reparam=self.reparam,
+                nondim=self.nondim,
+                polar=self.polar
+                )(input, transform=transform)
+        ansatz = (y[0]-jnp.pi)*y[0]*(y[1]-jnp.pi)*y[1]
+        return x*ansatz/((jnp.pi**2)*0.25)**2
+
+
+class BiharmonicAnsatzMLP(nn.Module):
+    name: str
+    input_dim: int
+    output_dim: int
+    hidden_dims: Sequence[int]
+    activation: Sequence[Callable]
+    initialization: Sequence[Callable]
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
+    polar: bool = False
+
+    @nn.compact
+    def __call__(self, input, transform = None):
+        y = input
+        x = MLP(name=self.name+"_nn", 
+                input_dim=self.input_dim, 
+                output_dim=self.output_dim, 
+                hidden_dims=self.hidden_dims, 
+                activation=self.activation,
+                initialization=self.initialization,
+                embed=self.embed,
+                reparam=self.reparam,
+                nondim=self.nondim,
+                polar=self.polar
+                )(input, transform=transform)
+        res = MLP(name=self.name+"_res",
+                  input_dim=self.input_dim,
+                  output_dim=self.output_dim,
+                  hidden_dims=[16 for _ in self.hidden_dims],
+                  activation=self.activation,
+                  initialization=self.initialization,
+                  embed=self.embed,
+                  reparam=self.reparam,
+                  nondim=self.nondim,
+                  polar=self.polar
+                  )(input, transform=transform)
+
+        # Constrain network to 0 on boundary of [-10, 10] x [-10, 10]
+        C_xx = (0.1*y[0]-1.)**3 * (0.1*y[0]+1.)**3
+        C_yy = (0.1*y[1]-1.)**3 * (0.1*y[1]+1.)**3
+
+        # Add function such that dyy = 10, and add residual net
+        return x*C_xx*C_yy + 5 * y[1]**2 + res
+
+
 class DoubleMLP(nn.Module):
     name: str
     input_dim: int
@@ -168,7 +244,9 @@ class ModifiedMLP(nn.Module):
     hidden_dims: Sequence[int]
     activation: Sequence[Callable]
     initialization: Sequence[Callable]
-    embed: int | None = None
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
     polar: bool = False
 
     @nn.compact
@@ -179,6 +257,9 @@ class ModifiedMLP(nn.Module):
         else:
             x = input
         
+        if self.nondim:
+            x = x / self.nondim
+        
         if self.polar:
             r = jnp.linalg.norm(x, axis=-1)
             theta = jnp.arctan2(x[1], x[0])
@@ -188,12 +269,12 @@ class ModifiedMLP(nn.Module):
             x = FourierEmbedding(self.embed["embed_scale"], self.embed["embed_dim"])(x)
         
         u = FactDense(features=self.hidden_dims[0],
-                     kernel_init=self.initialization[0](),
-                     name=f"{self.name}_u",
-                         reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
+                      kernel_init=self.initialization[0](),
+                      name=f"{self.name}_u",
+                      reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
         v = FactDense(features=self.hidden_dims[0],
-                     kernel_init=self.initialization[0](),
-                     name=f"{self.name}_v",
+                      kernel_init=self.initialization[0](),
+                      name=f"{self.name}_v",
                          reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
         
         u = self.activation[0](u)
@@ -201,16 +282,16 @@ class ModifiedMLP(nn.Module):
 
         for i, feats in enumerate(self.hidden_dims):
             x = FactDense(features=feats,
-                         kernel_init=self.initialization[i](),
-                         name=f"{self.name}_linear{i}",
-                         reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
+                          kernel_init=self.initialization[i](),
+                          name=f"{self.name}_linear{i}",
+                          reparam=self.reparam)(x)
             x = self.activation[i](x)
             x = x*u  + (1-x)*v
         
         x = FactDense(features=self.output_dim,
-                     kernel_init=self.initialization[-1](),
-                     name=f"{self.name}_linear_output",
-                     reparam={"type": "weight_fact", "mean": 0.5, "stddev": 0.1})(x)
+                      kernel_init=self.initialization[-1](),
+                      name=f"{self.name}_linear_output",
+                      reparam=self.reparam)(x)
         
         return x
 
@@ -264,15 +345,14 @@ class ResNetBlock(nn.Module):
     pre_act: Callable | None = None
     post_act: Callable | None = None
     shortcut_init: Callable | None = None
+    reparam: dict | None = None
 
-    def __post_init__(self) -> None:
+    def setup(self):
         if self.input_dim != self.output_dim:
             if self.shortcut_init is None:
                 self.shortcut_init = self.initialization[0]
         else:
             self.shortcut_init = None
-        
-        super().__post_init__()
         return
 
     @nn.compact
@@ -283,6 +363,7 @@ class ResNetBlock(nn.Module):
     
         # Shortcut input
         y = input
+
         # If dimensions match, use identity mapping:
         # Else use linear map between input and output
         if self.input_dim != self.output_dim:
@@ -291,11 +372,21 @@ class ResNetBlock(nn.Module):
         if self.pre_act is not None:
             x = self.pre_act(x)
 
-        for i, feats in enumerate(self.hidden_dims):
-            x = nn.Dense(features=feats, kernel_init=self.initialization[i](), name=f"{self.name}_linear{i}")(x)
-            x = self.activation[i](x)
+        # for i, feats in enumerate(self.hidden_dims):
+        #     x = nn.Dense(features=feats, kernel_init=self.initialization[i](), name=f"{self.name}_linear{i}")(x)
+        #     x = self.activation[i](x)
         
-        x = nn.Dense(features=self.output_dim, kernel_init=self.initialization[-1](), name=f"{self.name}_linear_output")(x)
+        # x = nn.Dense(features=self.output_dim, kernel_init=self.initialization[-1](), name=f"{self.name}_linear_output")(x)
+        x = MLP(name=self.name+"_mlp",
+                input_dim=self.input_dim, 
+                output_dim=self.output_dim, 
+                hidden_dims=self.hidden_dims, 
+                activation=self.activation,
+                initialization=self.initialization,
+                embed=None,
+                reparam=self.reparam,
+                nondim=None,
+                polar=None)(x)
         
         # Add the two flows together
         out = x+y
@@ -320,6 +411,42 @@ class ResNetBlock(nn.Module):
         s += f"shortcut_init:    {s_init}\n"
         s += f"\n"
         return s
+
+
+class ResNet(nn.Module):
+    name: str
+    input_dim: int
+    output_dim: int
+    hidden_dims: Sequence[int]
+    activation: Sequence[Callable]
+    initialization: Sequence[Callable]
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
+    polar: bool = False
+
+    @nn.compact
+    def __call__(self, input, transform = None):
+        
+        if transform is not None:
+            x = transform(input)
+        else:
+            x = input
+        
+        if self.nondim:
+            x = x / self.nondim
+        
+        if self.polar:
+            r = jnp.linalg.norm(x, axis=-1)
+            theta = jnp.arctan2(x[1], x[0])
+            x = jnp.concatenate((x, jnp.array([r, jnp.cos(2*theta)])))
+        
+        if self.embed:
+            x = FourierEmbedding(self.embed["embed_scale"], self.embed["embed_dim"])(x)
+        
+
+
+        raise NotImplementedError("ResNet implementation not finished.")
 
 
 class AiryNet(nn.Module):
@@ -438,6 +565,10 @@ def setup_network(network_settings: dict[str, str | dict]) -> MLP | ResNetBlock:
             parsed_settings = parse_MLP_settings(network_settings["specifications"])
             return DoubleMLP(**parsed_settings)
 
+        case "ansatz":
+            parsed_settings = parse_MLP_settings(network_settings["specifications"])
+            return BiharmonicAnsatzMLP(**parsed_settings)
+        
         case _:
             raise ValueError(f"Invalid network architecture: '{arch}'.")
         
