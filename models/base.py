@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 import matplotlib.pyplot as plt
+from matplotlib import rc
 
 from setup.settings import (
     ModelNotInitializedError,
@@ -90,7 +91,7 @@ class Model(metaclass=ABCMeta):
         
         if self.train_settings.checkpoint_every is not None:
             self.write_model(init=True)
-        
+
         if settings.get("description"):
             with open(self.dir.log_dir / "description.txt", "a+") as file:
                 file.writelines([settings["description"], "\n\n"])
@@ -449,39 +450,60 @@ class Model(metaclass=ABCMeta):
         Plots losses from array in different subplots according to the specified dict.
         """
         
-        num_plots = len(loss_map.keys())
-        fig, ax = plt.subplots(int(np.ceil(np.sqrt(num_plots))), int(np.ceil(np.sqrt(num_plots))), figsize=figsize)
-        plot_split = list(loss_map.keys())
+        # num_plots = len(loss_map.keys())
+        # fig, ax = plt.subplots(int(np.ceil(np.sqrt(num_plots))), int(np.ceil(np.sqrt(num_plots))), figsize=figsize)
+        # plot_split = list(loss_map.keys())
 
-        if epoch_step is not None:
-            epochs = epoch_step*np.arange(loss_arr.shape[0])
-            for i in range(num_plots):
-                ax[np.unravel_index(i, ax.shape)].semilogy(epochs, loss_arr[:, loss_map[plot_split[i]]], linewidth=5)
-                ax[np.unravel_index(i, ax.shape)].tick_params(axis='x')
-                ax[np.unravel_index(i, ax.shape)].tick_params(axis='y')
-                # ax[i].fill_between(epochs[epochs % 10000 >= 5000], 0, facecolor='gray', alpha=.5)
-        else:
-            for i in range(num_plots):
-                ax[np.unravel_index(i, ax.shape)].semilogy(loss_arr[:, loss_map[plot_split[i]]], linewidth=5)
-                ax[np.unravel_index(i, ax.shape)].tick_params(axis='x')
-                ax[np.unravel_index(i, ax.shape)].tick_params(axis='y')
+        # if epoch_step is not None:
+        #     epochs = epoch_step*np.arange(loss_arr.shape[0])
+        #     for i in range(num_plots):
+        #         ax[np.unravel_index(i, ax.shape)].semilogy(epochs, loss_arr[:, loss_map[plot_split[i]]], linewidth=5)
+        #         ax[np.unravel_index(i, ax.shape)].tick_params(axis='x')
+        #         ax[np.unravel_index(i, ax.shape)].tick_params(axis='y')
+        #         # ax[i].fill_between(epochs[epochs % 10000 >= 5000], 0, facecolor='gray', alpha=.5)
+        # else:
+        #     for i in range(num_plots):
+        #         ax[np.unravel_index(i, ax.shape)].semilogy(loss_arr[:, loss_map[plot_split[i]]], linewidth=5)
+        #         ax[np.unravel_index(i, ax.shape)].tick_params(axis='x')
+        #         ax[np.unravel_index(i, ax.shape)].tick_params(axis='y')
             
-        save_fig(fig_dir, name, extension, fig=fig)
-        plt.clf()
+        # save_fig(fig_dir, name, extension, fig=fig)
+        # plt.clf()
         
-        num_plots = len(loss_map.keys())
+        # num_plots = len(loss_map.keys())
         
-        if epoch_step is not None:
-            epochs = epoch_step*np.arange(loss_arr.shape[0])
-            plt.semilogy(epochs, loss_arr, linewidth=2)
-            plt.tick_params(axis='x')
-            plt.tick_params(axis='y')
-        else:
-            plt.semilogy(loss_arr, linewidth=2)
-            plt.tick_params(axis='x')
-            plt.tick_params(axis='y')
+        # if epoch_step is not None:
+        #     epochs = epoch_step*np.arange(loss_arr.shape[0])
+        # else:
+        #     epochs = np.arange(loss_arr.shape[0])
+        
+        # plt.semilogy(epochs, loss_arr, linewidth=2)
+        # plt.tick_params(axis='x')
+        # plt.tick_params(axis='y')
             
-        save_fig(fig_dir, "all_" + name, extension, fig=plt.gcf())
+        # save_fig(fig_dir, "all_" + name, extension, fig=plt.gcf())
+        
+        rc("text", usetex=True)
+        rc('text.latex', preamble=r'\usepackage{amsmath}')
+        
+        fig = plt.figure(figsize=(18,10))
+        plt.grid(True)
+        if epoch_step is not None:
+            ll = epoch_step*np.arange(loss_arr.shape[0])
+        else:
+            ll = np.arange(loss_arr.shape[0])
+        plt.semilogy(ll, loss_arr)
+        # if hasattr (self, "loss_names"):
+        #     plt.legend(self.loss_names, fontsize=25, framealpha=1.0)
+        # else:
+        plt.legend(list(loss_map.keys()), fontsize=25, framealpha=1.0)
+        ax = fig.gca()
+        ax.set_xticks(np.linspace(0, max(ll), 11, dtype=np.int32))
+        ax.set_xticklabels(np.linspace(0, max(ll), 11, dtype=np.int32), fontsize=25)
+        ax.set_xlabel(r"\textbf{Epochs}", fontsize=30)
+        ax.tick_params(axis='y', labelsize=25)
+        ax.set_ylabel(r"\textbf{MSE}", fontsize=30, rotation=0, ha="right", labelpad=5)
+        fig.savefig(fig_dir / (name + ".pdf"), bbox_inches="tight")
         
         return
         

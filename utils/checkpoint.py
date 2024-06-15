@@ -4,7 +4,9 @@ from etils import epath
 
 def write_model(params, step, dir, init: bool = False):
     if init:
-        dir = ocp.test_utils.erase_and_create_empty(dir)
+        if not dir.exists():
+            dir.mkdir()
+            # dir = ocp.test_utils.erase_and_create_empty(dir)
         return
     else:
         dir = epath.Path(dir)

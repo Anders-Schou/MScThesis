@@ -3,6 +3,7 @@ import argparse
 from collections.abc import Callable
 import pathlib
 import shutil
+import sys
 
 import jax
 import jax.tree_util as jtu
@@ -497,7 +498,8 @@ def parse_directory_settings(settings_dict: dict,
     shutil.rmtree(dir.log_dir / log_str, ignore_errors=True) # Remove current log_dir if it exists
     dir.log_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(settings_dict["settings_path"], dir.log_dir)
-
+    shutil.copy(sys.path[0] + '/main.py', dir.log_dir)
+    
     return dir
 
 

@@ -1,6 +1,7 @@
 from functools import partial
 from typing import override
 from time import perf_counter
+import copy
 
 import numpy as np
 import jax
@@ -84,7 +85,6 @@ class PINN01(BiharmonicPINN):
         loss_coll = self.loss_coll(params, inputs["coll"], true_val=true_val.get("coll"))
         loss_rect = self.loss_rect(params, inputs["rect"], true_val=true_val.get("rect"))
         
-        # loss_rect = tuple(100*i for i in loss_rect)
         # Return 1D array of all loss values in the following order
         self.loss_names = ["phi"] + [f"rect{i}" for i, _ in enumerate(loss_rect)]
         return jnp.array((loss_coll, *loss_rect))
@@ -154,15 +154,19 @@ if __name__ == "__main__":
     raw_settings = timer(parse_arguments)()
     pinn = timer(PINN01)(raw_settings)
     timer(pinn.sample_points)()
-    timer(pinn.train)()
-    timer(pinn.write_model)()
+    # timer(pinn.train)()
+    pinn.load_model()
+    # timer(pinn.write_model)()
     timer(pinn.plot_results)()
-    timer(pinn.eval)()
     
-    t2 = perf_counter()
+    # t2 = perf_counter()
+
+    # f = open(pinn.dir.log_dir.joinpath('time_and_eval.dat'), "w")
+    # f.write(f'Time taken for the whole training process: {t2-t1:.1f} s \t or \t {(t2-t1)/60.0:.1f} min\n')
+    
+    # for metric_fun in ["mse", "maxabse", "L2rel"]:
+    #     timer(pinn.eval)(metric=metric_fun)
         
-    f = open(pinn.dir.log_dir.joinpath('time_and_eval.dat'), "w")
-    f.write(f'Time taken for the whole training process: {t2-t1:.1f} s \t or \t {(t2-t1)/60.0:.1f} min\n')
-    f.write(f'L2-rel xx error: {pinn.eval_result["L2-rel"][0, 0]:.4f}\n')
-    f.write(f'L2-rel xy error: {pinn.eval_result["L2-rel"][0, 1]:.4f}\n')
-    f.write(f'L2-rel yy error: {pinn.eval_result["L2-rel"][1, 1]:.4f}\n')
+    #     f.write(f'L2-rel xx error: {pinn.eval_result[metric_fun][0, 0]:.4f}\n')
+    #     f.write(f'L2-rel xy error: {pinn.eval_result[metric_fun][0, 1]:.4f}\n')
+    #     f.write(f'L2-rel yy error: {pinn.eval_result[metric_fun][1, 1]:.4f}\n')

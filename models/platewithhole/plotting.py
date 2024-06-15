@@ -25,7 +25,7 @@ from utils.transforms import (
 
 _DEFAULT_RADIUS = 2
 _DEFAULT_CIRCLE_RES = 100
-_CLEVELS = 501
+_CLEVELS = 801
 _FONTSIZE = 40
 _LABELSIZE = 40
 _TICKLABELSIZE = 25
@@ -150,7 +150,7 @@ def plot_potential(X, Y, Z, *, fig_dir, name,
 
 
 def plot_stress(X, Y, Z, Z_true, *, fig_dir, name,
-                extension = "png",
+                extension = "pdf",
                 radius = _DEFAULT_RADIUS,
                 circle_res = _DEFAULT_CIRCLE_RES,
                 angle = None,
@@ -195,6 +195,7 @@ def plot_stress(X, Y, Z, Z_true, *, fig_dir, name,
                 p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
             else:
                 p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
+            p.set_edgecolor("face")
             ax[r, c].set_xlabel(r"$x$", fontsize=_LABELSIZE)
             ax[r, c].set_ylabel(r"$y$", rotation=0, fontsize=_LABELSIZE)
             ax[r, c].set_xticks([-10., -5., 0., 5., 10.])
@@ -202,10 +203,12 @@ def plot_stress(X, Y, Z, Z_true, *, fig_dir, name,
             ax[r, c].set_xticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
             ax[r, c].set_yticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
             ax[r, c].add_patch(plt.Circle((0, 0), radius=radius+0.05, color="#777777"))
-            cbar = plt.colorbar(p, ax=ax[r, c])
+            if cc < 2:
+                cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(jnp.min(u[cc][r]), jnp.max(u[cc][r]), 11))
+            else:
+                cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(0, jnp.max(u[cc][r]), 11))
             cbar.ax.tick_params(labelsize=_TICKLABELSIZE)
 
-    #[plot_circle(ax[i, j], radius, circle_res, angle=angle, color="red", linewidth=1.5) for j, _ in enumerate(include) for i, _ in enumerate(hess_idx)]
     fig.tight_layout(pad=3.0)
     save_fig(fig_dir, name, extension)
     plt.clf()
@@ -213,7 +216,7 @@ def plot_stress(X, Y, Z, Z_true, *, fig_dir, name,
     
 
 def plot_polar_stress(X, Y, Z, Z_true, *, fig_dir, name, 
-                      extension = "png", 
+                      extension = "pdf", 
                       figsize = (30, 30)):
     """
     Function for plotting stresses in polar coordinates.
@@ -266,13 +269,17 @@ def plot_polar_stress(X, Y, Z, Z_true, *, fig_dir, name,
                 p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
             else:
                 p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
+            p.set_edgecolor("face")
             ax[r, c].set_xlabel(r"$r$", fontsize=_LABELSIZE)
             ax[r, c].set_ylabel(r"$\theta$", rotation=0, fontsize=_LABELSIZE)
             ax[r, c].set_xticks([2., 4., 6., 8., 10.])
             ax[r, c].set_yticks([0., 0.5*jnp.pi, jnp.pi, 1.5*jnp.pi, 2.*jnp.pi])
             ax[r, c].set_xticklabels([r"$2$", r"$4$", r"$6$", r"$8$", r"$10$"], fontsize=_TICKLABELSIZE)
             ax[r, c].set_yticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"], fontsize=_TICKLABELSIZE)
-            cbar = plt.colorbar(p, ax=ax[r, c])
+            if cc < 2:
+                cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(jnp.min(u[cc][r]), jnp.max(u[cc][r]), 11))
+            else:
+                cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(0, jnp.max(u[cc][r]), 11))
             cbar.ax.tick_params(labelsize=_TICKLABELSIZE)
 
     fig.tight_layout(pad=3.0)

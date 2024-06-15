@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import jax
 import jax.numpy as jnp
 import numpy as np
+from matplotlib import rc
 
 from . import analytic
 from models.networks import netmap
@@ -13,10 +14,10 @@ from utils.plotting import (
 )
 
 
-_DEFAULT_RADIUS = 2
-_DEFAULT_CIRCLE_RES = 100
-_CLEVELS = 101
+_CLEVELS = 401
 _FONTSIZE = 40
+_LABELSIZE = 40
+_TICKLABELSIZE = 25
 
 
 
@@ -28,7 +29,8 @@ def plot_loss(
     name,
     epoch_step = None,
     extension="png",
-    figsize = (35, 30)
+    figsize = (35, 30),
+    dpi = 100
 ) -> None:
     """
     Plots losses from array in different subplots according to the specified dict.
@@ -51,7 +53,7 @@ def plot_loss(
             ax[i].tick_params(axis='x', labelsize=_FONTSIZE)
             ax[i].tick_params(axis='y', labelsize=_FONTSIZE)
         
-    save_fig(fig_dir, name, extension, fig=fig)
+    save_fig(fig_dir, name, extension, fig=fig, dpi=dpi)
     plt.clf()
     return
 
@@ -86,15 +88,15 @@ def plot_results(geometry_settings, forward, hessian, params, fig_dir, log_dir, 
     X, Y, phi, phi_true, sigma_cart_list, sigma_cart_true_list = get_plot_data(geometry_settings, forward, hessian, params, grid=grid, **kwargs)
 
     if save:
-        plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=fig_dir, name="Cart_stress")
-        plot_potential(X, Y, phi, phi_true, fig_dir=fig_dir, name="Potential")
+        plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=fig_dir, name="Cart_stress", dpi=dpi)
+        plot_potential(X, Y, phi, phi_true, fig_dir=fig_dir, name="Potential", dpi=dpi)
     if log:        
         log_stress(X, Y, sigma_cart_list, sigma_cart_true_list, log_dir=log_dir, name="Cart_stress", varnames="XY", step=step, dpi=dpi)
 
     return
 
 def plot_potential(X, Y, Z, Z_true, *, fig_dir, name,
-                   extension="png"):
+                   extension="png", dpi=100):
     """
     Function for plotting potential function.
     """    
@@ -110,52 +112,69 @@ def plot_potential(X, Y, Z, Z_true, *, fig_dir, name,
     p = ax[1].contourf(X, Y, Z_true, levels=_CLEVELS)
     plt.colorbar(p, ax=ax[1])
     
-    save_fig(fig_dir, name, extension)
+    save_fig(fig_dir, name, extension, dpi=dpi)
     plt.clf()
     return
 
 
 def plot_stress(X, Y, Z, Z_true, *, fig_dir, name,
-                extension="png",
-                radius = _DEFAULT_RADIUS,
-                circle_res = _DEFAULT_CIRCLE_RES,
-                angle = None,
-                figsize = (35, 30)):
+                extension="pdf",
+                figsize = (25, 30), dpi = 100):
     """
     Function for plotting stresses in cartesian coordinates.
     """
+    rc("text", usetex=True)
+    rc('text.latex', preamble=r'\usepackage{amsmath}')
     hess_idx = [0, 1, 3]
 
     vmins = [min(jnp.min(Z_true[i]), jnp.min(Z[i])) for i in hess_idx]
     vmaxs = [max(jnp.max(Z_true[i]), jnp.max(Z[i])) for i in hess_idx]
-
-
+    
     u = [
         [Z[i] for i in hess_idx],
         [Z_true[i] for i in hess_idx],
         [jnp.abs(Z[i]-Z_true[i]) for i in hess_idx]
     ]
-    titles = ["XX stress", "XY stress", "YY stress"]
-    all_titles = [
-        titles,
-        ["True " + t for t in titles],
-        ["Abs. error of " + t for t in titles]
-    ]
+    all_titles = [[
+        r"Prediction ($\sigma_{xx}$)",
+        r"Prediction ($\sigma_{xy}$)",
+        r"Prediction ($\sigma_{yy}$)"
+    ], [
+        r"True solution ($\sigma_{xx}$)",
+        r"True solution ($\sigma_{xy}$)",
+        r"True solution ($\sigma_{yy}$)"
+    ], [
+        r"Absolute error ($\sigma_{xx}$)",
+        r"Absolute error ($\sigma_{xy}$)",
+        r"Absolute error ($\sigma_{yy}$)"
+    ]]
 
+    include = [0, 2]
 
-    fig, ax = plt.subplots(3, len(hess_idx), figsize=figsize)
-
-    for r in range(3):
-        for c, h in enumerate(hess_idx):
-            ax[r, c].set_aspect('auto', adjustable='datalim')
-            ax[r, c].set_title(all_titles[r][c], fontsize=_FONTSIZE)
-            if r < 2:
-                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS, vmin=vmins[c], vmax=vmaxs[c])
+    fig, ax = plt.subplots(len(hess_idx), len(include), figsize=figsize)
+    for r, h in enumerate(hess_idx):
+        for c, cc in enumerate(include):
+            ax[r, c].set_aspect('equal', adjustable='box')
+            ax[r, c].set_title(all_titles[cc][r], fontsize=_FONTSIZE, pad=20)
+            if cc < 2:
+                p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
             else:
-                p = ax[r, c].contourf(X , Y, u[r][c], levels=_CLEVELS)
-            plt.colorbar(p, ax=ax[r, c])
+                p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
+            p.set_edgecolor("face")
+            ax[r, c].set_xlabel(r"$x$", fontsize=_LABELSIZE)
+            ax[r, c].set_ylabel(r"$y$", rotation=0, fontsize=_LABELSIZE)
+            ax[r, c].set_xticks([-10., -5., 0., 5., 10.])
+            ax[r, c].set_yticks([-10., -5., 0., 5., 10.])
+            ax[r, c].set_xticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
+            ax[r, c].set_yticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
+            if cc < 2:
+                cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(jnp.min(u[cc][r]), jnp.max(u[cc][r]), 11))
+            else:
+                cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(0, jnp.max(u[cc][r]), 11))
+            cbar.ax.tick_params(labelsize=_TICKLABELSIZE)
 
-    save_fig(fig_dir, name, extension)
+    fig.tight_layout(pad=3.0)
+    save_fig(fig_dir, name, extension, dpi=dpi)
     plt.clf()
     return
     

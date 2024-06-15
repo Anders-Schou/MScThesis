@@ -10,12 +10,12 @@ import numpy as np
 _CLEVELS = 101
 
 def save_fig(dir: str, file_name: str, format: str = "png",
-             fig: Figure | None = None, clear = True, close = True):
+             fig: Figure | None = None, clear = True, close = True, dpi=100):
     if not file_name.endswith("." + format):
         file_name += ("." + format)
     if fig is None:
         fig = plt.gcf()
-    fig.savefig(os.path.join(dir, file_name), format=format, bbox_inches="tight")
+    fig.savefig(os.path.join(dir, file_name), format=format, bbox_inches="tight", dpi=dpi)
     if clear:
         fig.clf()
     if close:

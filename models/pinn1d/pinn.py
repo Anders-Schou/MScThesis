@@ -372,21 +372,21 @@ class PINN1D(PINN):
         fig, ax = plt.subplots(1, 3, figsize=(35, 10))
         for i in range(5):
             ax[0].plot(xx, plot_data0[i])
-        ax[0].legend([r"$\hat u_{" + "x"*i + "}$" for i in range(5)], fontsize=25, loc="lower left")
-        ax[0].set_ylim(min([min(data) for data in plot_data0 + plot_data1]), max([max(data) for data in plot_data0 + plot_data1]))
+        ax[0].legend([r"$\hat u$"] + [r"$\partial_{" + "x"*i + r"}\hat u$" for i in range(1,5)], fontsize=25, loc="lower left")
+        ax[0].set_ylim(min([min(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]), max([max(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]))
         ax[0].set_xlim(self.geometry_settings["domain"]["interval"]["xlim"])
         ax[0].set_box_aspect(1)
         
         for i in range(5):
             ax[1].plot(xx, plot_data1[i])
-        ax[1].legend([r"$u_{" + "x"*i + "}$" for i in range(5)], fontsize=25, loc="lower left")
-        ax[1].set_ylim(min([min(data) for data in plot_data0 + plot_data1]), max([max(data) for data in plot_data0 + plot_data1]))
+        ax[1].legend(["$u$"] + [r"$\partial_{" + "x"*i + "}u$" for i in range(1, 5)], fontsize=25, loc="lower left")
+        ax[1].set_ylim(min([min(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]), max([max(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]))
         ax[1].set_xlim(self.geometry_settings["domain"]["interval"]["xlim"])
         ax[1].set_box_aspect(1)
         
         for i in range(5):
             ax[2].semilogy(xx, plot_data2[i])
-        ax[2].legend([r"$|\hat u_{" + "x"*i + "} - u_{" + "x"*i + "}|$" for i in range(5)], fontsize=25, loc="lower left")
+        ax[2].legend([r"$|\hat u - u|$"] + [r"$|\partial_{" + "x"*i + r"}\hat u - \partial_{" + "x"*i + "}u|$" for i in range(1, 5)], fontsize=25, loc="lower left")
         ax[2].set_ylim(min([min(data) for data in plot_data2])/10, max([max(data) for data in plot_data2])*10)
         ax[2].set_xlim(self.geometry_settings["domain"]["interval"]["xlim"])
         ax[2].set_box_aspect(1)

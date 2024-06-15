@@ -1,5 +1,5 @@
 {
-    "id": "013",
+    "id": "001",
     "seed": 1234,
     "description": "Square",
 
@@ -21,7 +21,7 @@
 
     "geometry": {
         "domain": {
-            "rectangle": { "xlim": [-4, 4], "ylim": [-4, 4] },
+            "rectangle": { "xlim": [-10, 10], "ylim": [-10, 10] },
             "circle": { "center": [0.0, 0.0], "radius": 2.0 }
         }
     },
@@ -29,15 +29,15 @@
     "run": {
         "train": {
             "sampling": {
-                "coll": 4000,
+                "coll": 8000,
                 "rect": [500, 500, 500, 500],
-                "data": 4000,
+                "data": 0,
                 "do_plots": true
             },
-            "iterations": 1000,
+            "iterations": 50000,
             "optimizer": "adam",
             "loss_fn": "mse",
-            "update_scheme": "softadapt",
+            "update_scheme": "unweighted",
             "update_kwargs": {
                 "softadapt": {
                     "order": 4,
@@ -61,8 +61,8 @@
                 }
             },
             "learning_rate": 1e-3,
-            "batch_size": 32,
-            "decay_rate": 0.99,
+            "batch_size": -1,
+            "decay_rate": 0.95,
             "decay_steps": 2000,
             "transfer_learning": false,
             "checkpoint_every": 5000,
@@ -135,8 +135,8 @@
             "overwrite": false,
             "file_extension": "png"
         },
-        "dpi": 75,
-        "grid": 201
+        "dpi": 100,
+        "grid": 151
     },
 
     "logging": {

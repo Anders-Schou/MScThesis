@@ -11,7 +11,7 @@ def sample_line(key,
                 *args,
                 ref_scale: float = 1.0,
                 ref_offset: float = 0.0,
-                distribution: str = "sobol",
+                distribution: str = "uniform",
                 round_up: bool = False,
                 **kwargs) -> jax.Array:
     if len(end_points) != 2:

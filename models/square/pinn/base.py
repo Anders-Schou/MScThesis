@@ -18,7 +18,7 @@ from models.networks import netmap
 from models.square import analytic
 from models.square import loss as sqloss
 from models.square import plotting as sqplot
-from models.loss import L2rel
+from models.loss import L2rel, mse, maxabse
 from utils.utils import timer
 
 class SquarePINN(PINN):
@@ -201,10 +201,16 @@ class SquarePINN(PINN):
         """
         match metric.lower():
             case "l2-rel":
-                metric_fun = L2rel
+                metric_fun = jax.jit(L2rel)
+            case "l2rel":
+                metric_fun = jax.jit(L2rel)
+            case "mse":
+                metric_fun = jax.jit(mse)
+            case "maxabse":
+                metric_fun = jax.jit(maxabse)
             case _:
                 print(f"Unknown metric: '{metric}'. Default ('L2-rel') is used for evaluation.")
-                metric_fun = L2rel
+                metric_fun = jax.jit(L2rel)
 
         u = jnp.squeeze(netmap(self.jitted_hessian)(self.params, self.eval_points[point_type]))
         u_true = jax.vmap(partial(analytic.cart_stress_true, **kwargs))(self.eval_points[point_type])

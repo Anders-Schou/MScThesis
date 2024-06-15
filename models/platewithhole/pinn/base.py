@@ -19,7 +19,7 @@ from models.networks import netmap
 from models.platewithhole import analytic
 from models.platewithhole import loss as pwhloss
 from models.platewithhole import plotting as pwhplot
-from models.loss import Lp_rel
+from models.loss import L2rel, mse, maxabse
 from utils.transforms import (
     vrtheta2xy,
     vxy2rtheta
@@ -403,10 +403,16 @@ class PlateWithHolePINN(PINN):
         """
         match metric.lower():
             case "l2-rel":
-                metric_fun = jax.jit(partial(Lp_rel, ord=2))
+                metric_fun = jax.jit(L2rel)
+            case "l2rel":
+                metric_fun = jax.jit(L2rel)
+            case "mse":
+                metric_fun = jax.jit(mse)
+            case "maxabse":
+                metric_fun = jax.jit(maxabse)
             case _:
                 print(f"Unknown metric: '{metric}'. Default ('L2-rel') is used for evaluation.")
-                metric_fun = jax.jit(partial(Lp_rel, ord=2))
+                metric_fun = jax.jit(L2rel)
 
         u = jnp.squeeze(netmap(self.jitted_hessian)(self.params, self.eval_points[point_type]))
         u_true = jax.vmap(partial(analytic.cart_stress_true, **kwargs))(self.eval_points[point_type])
