@@ -45,7 +45,7 @@ def Lp_rel(u: jax.Array, u_true: jax.Array, p: int = 2):
     #return jnp.sqrt(jnp.divide(mse(u, u_true), ms(u_true))) # means of num/denom cancel
 
 def L2rel(u: jax.Array, u_true: jax.Array):
-    return partial(Lp_rel, p=2)
+    return jax.jit(partial(Lp_rel, p=2))(u, u_true)
     
 
 def _norme(u: jax.Array, u_true: jax.Array | None = None, order = 2):

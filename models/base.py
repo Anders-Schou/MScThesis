@@ -489,9 +489,9 @@ class Model(metaclass=ABCMeta):
         fig = plt.figure(figsize=(18,10))
         plt.grid(True)
         if epoch_step is not None:
-            ll = epoch_step*np.arange(loss_arr.shape[0])
+            ll = epoch_step*np.arange(1, loss_arr.shape[0] + 1)
         else:
-            ll = np.arange(loss_arr.shape[0])
+            ll = np.arange(1, loss_arr.shape[0] + 1)
         plt.semilogy(ll, loss_arr)
         # if hasattr (self, "loss_names"):
         #     plt.legend(self.loss_names, fontsize=25, framealpha=1.0)

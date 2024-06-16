@@ -401,6 +401,9 @@ class PlateWithHolePINN(PINN):
         """
         Evaluates the Cartesian stresses using the specified metric.
         """
+        def phi2sigma(u):
+            return jnp.array([[u[1, 1], -u[1, 0]], [-u[0, 1], u[0, 0]]])
+
         match metric.lower():
             case "l2-rel":
                 metric_fun = jax.jit(L2rel)
@@ -415,6 +418,7 @@ class PlateWithHolePINN(PINN):
                 metric_fun = jax.jit(L2rel)
 
         u = jnp.squeeze(netmap(self.jitted_hessian)(self.params, self.eval_points[point_type]))
+        u = jax.vmap(phi2sigma)(u)
         u_true = jax.vmap(partial(analytic.cart_stress_true, **kwargs))(self.eval_points[point_type])
 
         err = jnp.array([[metric_fun(u[:, i, j], u_true[:, i, j]) for i in range(2)] for j in range(2)])

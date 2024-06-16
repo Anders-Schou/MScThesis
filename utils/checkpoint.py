@@ -1,6 +1,6 @@
 import orbax.checkpoint as ocp
 from etils import epath
-
+import os
 
 def write_model(params, step, dir, init: bool = False):
     if init:
@@ -21,10 +21,11 @@ def write_model(params, step, dir, init: bool = False):
     return
     
 
-def load_model(step, dir):
+def load_model(step_unused, dir):
     options = ocp.CheckpointManagerOptions(max_to_keep=1,
                                             create=True)
     mngr = ocp.CheckpointManager(directory=dir,
                                     options=options,
                                     item_handlers=ocp.StandardCheckpointHandler())
+    step = max([eval(i) for i in os.listdir(dir)])
     return mngr.restore(step=step)
