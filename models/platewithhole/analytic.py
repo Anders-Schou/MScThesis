@@ -53,6 +53,14 @@ def cart_stress_true(xy, S = _TENSION, a = _RADIUS):
     return polar2cart_tensor(polar_stress_hessian, rtheta)
 
 
+def principal_stress_true(coords, polar = False, S = _TENSION, a = _RADIUS):
+    if polar:
+        p = polar_stress_true(coords, S=S, a=a)
+    else:
+        p = cart_stress_true(coords, S=S, a=a)
+    return jnp.linalg.eigvalsh(p)
+
+
 def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | None],
                   *,
                   exclude: Sequence[str] | None = None,
