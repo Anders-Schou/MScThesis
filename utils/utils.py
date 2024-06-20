@@ -3,6 +3,7 @@ from functools import wraps
 import os
 import json
 from time import perf_counter
+import subprocess
 
 import jax
 import jax.numpy as jnp
@@ -72,6 +73,16 @@ def find_first_integer(s: str):
             break
         
     return int(s[start:i])
+
+
+def get_gpu_model():
+    line_as_bytes = subprocess.check_output("nvidia-smi -L", shell=True)
+    line = line_as_bytes.decode("ascii")
+    line = line.split("\n", 1)[0]
+    print(line)
+    _, line = line.split(":", 1)
+    line, _ = line.split("(")
+    return line.strip()
 
 
 class WaveletActivation(nn.Module):

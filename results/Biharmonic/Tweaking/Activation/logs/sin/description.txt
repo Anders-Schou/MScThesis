@@ -1,0 +1,2 @@
+sin as activation function
+

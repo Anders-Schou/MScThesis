@@ -1,0 +1,10 @@
+Time taken for the whole training process: 5320.8 s 	 or 	 88.7 min
+mse xx error: 8.1980
+mse xy error: 1.0261
+mse yy error: 2.6359
+maxabse xx error: 24.7289
+maxabse xy error: 7.4303
+maxabse yy error: 8.2337
+L2rel xx error: 0.2755
+L2rel xy error: 0.9217
+L2rel yy error: 1.4270

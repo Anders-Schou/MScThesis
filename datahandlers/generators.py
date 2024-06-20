@@ -189,7 +189,7 @@ def generate_collocation_points(key: jax.random.PRNGKey,
                                 ylim: Sequence[float],
                                 num_coll: int,
                                 sobol: bool = True,
-                                round_up: bool = False) -> jax.Array:
+                                round_up: bool = True) -> jax.Array:
     if num_coll <= 0:
         return jnp.empty((0, 2))
     
@@ -242,6 +242,7 @@ def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
                                           ylim_all: Sequence[float],
                                           points: int | Sequence[int] | None,
                                           sobol: bool = True,
+                                          round_up = True,
                                           domain_type: str = "full"
                                           ) -> jax.Array | tuple[jax.Array]:
     """
@@ -306,7 +307,7 @@ def generate_collocation_points_with_hole(key: jax.random.PRNGKey,
 
     # Initial coll point gen
     key, key_coll = jax.random.split(key)
-    xy_coll = generate_collocation_points(key_coll, xlim, ylim, num_coll, sobol=sobol, round_up=True)
+    xy_coll = generate_collocation_points(key_coll, xlim, ylim, num_coll, sobol=sobol, round_up=round_up)
     xy_coll = remove_points(xy_coll, lambda p: jnp.linalg.norm(p, axis=-1) <= radius)
     
     # Filler coll point gen
@@ -354,8 +355,8 @@ def generate_rectangle_with_hole(key: jax.random.PRNGKey,
                                  num_rect: int | Sequence[int],
                                  num_circ: int,
                                  sobol: bool = True,
-                                 domain_type: str = "full",
-                                 shuffle: bool = False
+                                 round_up = True,
+                                 domain_type: str = "full"
                                  ) -> dict[str, jax.Array | tuple[jax.Array]]:
     """
     Main function for generating necessary sample points for the plate-with-hole problem.
@@ -381,9 +382,7 @@ def generate_rectangle_with_hole(key: jax.random.PRNGKey,
 
     key, rectkey, circkey, collkey, permkey = jax.random.split(key, 5)
 
-    xy_coll = generate_collocation_points_with_hole(collkey, radius, xlim, ylim, num_coll, sobol=sobol, domain_type=domain_type)
-    if shuffle:
-        xy_coll = jax.random.permutation(permkey, xy_coll)
+    xy_coll = generate_collocation_points_with_hole(collkey, radius, xlim, ylim, num_coll, sobol=sobol, domain_type=domain_type, round_up=round_up)
     xy_rect = generate_rectangle_points(rectkey, xlim, ylim, num_rect, domain_type=domain_type, radius=radius)
     xy_circ = generate_circle_points(circkey, radius, num_circ, angle_interval=angle_interval)
     # xy_test = generate_collocation_points_with_hole(testkey, radius, xlim, ylim, num_test)

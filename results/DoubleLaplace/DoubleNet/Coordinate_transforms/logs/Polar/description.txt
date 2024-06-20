@@ -1,0 +1,2 @@
+Inputting r, cos(2theta) and sin(2theta) as well with double network
+

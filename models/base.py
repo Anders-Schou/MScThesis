@@ -178,7 +178,7 @@ class Model(metaclass=ABCMeta):
         else:
             step = self.train_settings.iterations
         finally:
-            self.params = load_model(step, dir)
+            self.params, self.checkpoint_epoch = load_model(step, dir)
         return
         
     def write_model(self, step: int | None = None, dir: str | None = None, init: bool = False):

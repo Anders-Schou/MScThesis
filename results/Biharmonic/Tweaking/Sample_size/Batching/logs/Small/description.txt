@@ -1,0 +1,2 @@
+Using a batch size of 4096
+

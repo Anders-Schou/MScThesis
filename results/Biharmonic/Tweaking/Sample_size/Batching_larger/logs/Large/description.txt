@@ -1,0 +1,2 @@
+Using a batch size of 16384
+

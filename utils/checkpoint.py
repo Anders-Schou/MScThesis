@@ -28,4 +28,4 @@ def load_model(step_unused, dir):
                                     options=options,
                                     item_handlers=ocp.StandardCheckpointHandler())
     step = max([eval(i) for i in os.listdir(dir)])
-    return mngr.restore(step=step)
+    return mngr.restore(step=step), step

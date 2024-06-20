@@ -1,0 +1,2 @@
+Standard cartesian approach inputting x and y with double network
+

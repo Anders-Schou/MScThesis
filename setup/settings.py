@@ -205,6 +205,8 @@ class MLPSettings(Settings):
     embed: dict | None = None
     reparam: dict | None = None
     nondim: float | None = None
+    polar: bool = False
+    only_polar: bool = False
 
 
 @dataclass

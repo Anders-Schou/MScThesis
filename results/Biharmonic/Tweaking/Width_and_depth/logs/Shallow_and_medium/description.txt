@@ -1,0 +1,2 @@
+1 layer with 128 neurons
+

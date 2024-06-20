@@ -204,6 +204,14 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     if settings_dict.get("nondim") is not None:
         check_pos(settings_dict["nondim"], "nondim")
         settings.nondim = settings_dict["nondim"]
+        
+    # input Polar coordinates as well as cartesian
+    if settings_dict.get("polar") is not None:
+        settings.polar = settings_dict["polar"]
+        
+    # Only Polar coordinates
+    if settings_dict.get("only_polar") is not None:
+        settings.only_polar = settings_dict["only_polar"]
 
     return settings2dict(settings)
 
@@ -497,8 +505,8 @@ def parse_directory_settings(settings_dict: dict,
     dir.log_dir = dir.log_dir / id
     shutil.rmtree(dir.log_dir / log_str, ignore_errors=True) # Remove current log_dir if it exists
     dir.log_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy(settings_dict["settings_path"], dir.log_dir)
-    shutil.copy(sys.path[0] + '/main.py', dir.log_dir)
+    # shutil.copy(settings_dict["settings_path"], dir.log_dir)
+    # shutil.copy(sys.path[0] + '/main.py', dir.log_dir)
     
     return dir
 

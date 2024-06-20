@@ -75,6 +75,7 @@ class MLP(nn.Module):
     reparam: dict | None = None
     nondim: float | None = None
     polar: bool = False
+    only_polar: bool = False
 
     @nn.compact
     def __call__(self, input, transform = None):
@@ -90,7 +91,12 @@ class MLP(nn.Module):
         if self.polar:
             r = jnp.linalg.norm(x, axis=-1)
             theta = jnp.arctan2(x[1], x[0])
-            x = jnp.concatenate((x, jnp.array([r, jnp.cos(2*theta)])))
+            x = jnp.concatenate((x, jnp.array([r, jnp.cos(2*theta), jnp.sin(2*theta)])))
+            
+        if self.only_polar:
+            r = jnp.linalg.norm(x, axis=-1)
+            theta = jnp.arctan2(x[1], x[0])
+            x = jnp.array([r, jnp.cos(2*theta), jnp.sin(2*theta)])
 
         if self.embed:
             x = FourierEmbedding(self.embed["embed_scale"], self.embed["embed_dim"])(x)
@@ -208,7 +214,7 @@ class DoubleMLP(nn.Module):
     reparam: dict | None = None
     nondim: float | None = None
     polar: bool = False
-
+    only_polar: bool = False
         
     @nn.compact
     def __call__(self, input, transform = None):
@@ -221,7 +227,8 @@ class DoubleMLP(nn.Module):
                            embed=self.embed,
                            reparam=self.reparam,
                            nondim=self.nondim,
-                           polar=self.polar
+                           polar=self.polar,
+                           only_polar=self.only_polar
                            )(input, transform=transform)
         
         psi = MLP(name=self.name+"_psi",
@@ -233,7 +240,9 @@ class DoubleMLP(nn.Module):
                            embed=self.embed,
                            reparam=self.reparam,
                            nondim=self.nondim,
-                           polar=self.polar)(input, transform=transform)
+                           polar=self.polar,
+                           only_polar=self.only_polar
+                           )(input, transform=transform)
         return jnp.array([phi, psi])
 
 
@@ -248,6 +257,7 @@ class ModifiedMLP(nn.Module):
     reparam: dict | None = None
     nondim: float | None = None
     polar: bool = False
+    only_polar: bool = False
 
     @nn.compact
     def __call__(self, input, transform = None):
@@ -263,8 +273,13 @@ class ModifiedMLP(nn.Module):
         if self.polar:
             r = jnp.linalg.norm(x, axis=-1)
             theta = jnp.arctan2(x[1], x[0])
-            x = jnp.concatenate((x, jnp.array([r, jnp.cos(2*theta)])))
-        
+            x = jnp.concatenate((x, jnp.array([r, jnp.cos(2*theta), jnp.sin(2*theta)])))
+            
+        if self.only_polar:
+            r = jnp.linalg.norm(x, axis=-1)
+            theta = jnp.arctan2(x[1], x[0])
+            x = jnp.array([r, jnp.cos(2*theta), jnp.sin(2*theta)])
+
         if self.embed:
             x = FourierEmbedding(self.embed["embed_scale"], self.embed["embed_dim"])(x)
         
@@ -506,16 +521,22 @@ class DualMLP(nn.Module):
     hidden_dims: Sequence[int]
     activation: Sequence[Callable]
     initialization: Sequence[Callable]
-
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
+    polar: bool = False
+    only_polar: bool = False
+    
     @nn.compact
     def __call__(self, xy):
         rt = xy2rtheta(xy)
         cos_2t = jnp.cos(2*rt[1])
-        rcos2t = jnp.array([rt[0], cos_2t])
+        sin_2t = jnp.sin(2*rt[1])
+        rcossin2t = jnp.array([rt[0], cos_2t, sin_2t])
         sym = MLP(name="sym_mlp", input_dim=1, output_dim=1, hidden_dims=self.hidden_dims,
                   activation=self.activation, initialization=self.initialization)(rt[0].reshape((1,)))
-        nonsym = MLP(name="nonsym_mlp", input_dim=2, output_dim=1, hidden_dims=self.hidden_dims,
-                     activation=self.activation, initialization=self.initialization)(rcos2t)
+        nonsym = MLP(name="nonsym_mlp", input_dim=3, output_dim=1, hidden_dims=self.hidden_dims,
+                     activation=self.activation, initialization=self.initialization)(rcossin2t)
         return jnp.add(sym, nonsym)
 
 

@@ -1,0 +1,2 @@
+Using gradnorm (loss weighted) loss weights
+

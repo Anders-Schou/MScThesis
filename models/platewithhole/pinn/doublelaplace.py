@@ -59,8 +59,8 @@ class DoubleLaplacePINN(PlateWithHolePINN):
 
         # Return both losses
         if true_val is None:
-            return mse(lap_phi, netmap(self.psi)(params, input)), ms(lap_psi)
-        return mse(lap_phi, netmap(self.psi)(params, input)), mse(lap_psi, true_val)
+            return self.loss_fn(lap_phi, netmap(self.psi)(params, input)), self.loss_fn(lap_psi)
+        return self.loss_fn(lap_phi, netmap(self.psi)(params, input)), self.loss_fn(lap_psi, true_val)
 
     def resample_eval(self,
                       params,
@@ -79,5 +79,5 @@ class DoubleLaplacePINN(PlateWithHolePINN):
 
         # Return both losses
         if true_val is None:
-            return sqe(lap_phi, self.psi(params, input)) + sq(lap_psi)
-        return sqe(lap_phi, self.psi(params, input)) + sqe(lap_psi, true_val)
+            return self.loss_fn(lap_phi, self.psi(params, input)) + self.loss_fn(lap_psi)
+        return self.loss_fn(lap_phi, self.psi(params, input)) + self.loss_fn(lap_psi, true_val)

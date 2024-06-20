@@ -1,0 +1,2 @@
+Using manual weights of 10x boundary conditions
+
