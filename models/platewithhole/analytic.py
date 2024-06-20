@@ -61,6 +61,11 @@ def principal_stress_true(coords, polar = False, S = _TENSION, a = _RADIUS):
     return jnp.linalg.eigvalsh(p)
 
 
+def von_mises_stress_true(coords, S = _TENSION, a = _RADIUS):
+    p = cart_stress_true(coords, S=S, a=a)
+    return jnp.sqrt([0, 0]**2 + p[1, 1]**2 - p[0, 0]*p[1, 1] + 3*p[0, 1]**2)
+
+
 def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | None],
                   *,
                   exclude: Sequence[str] | None = None,
