@@ -1,2 +1,0 @@
-wavelet as activation function
-

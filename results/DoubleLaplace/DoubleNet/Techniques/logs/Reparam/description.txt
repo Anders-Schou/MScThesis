@@ -1,2 +1,0 @@
-Random Weight Factorization with double network
-

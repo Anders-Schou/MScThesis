@@ -1,2 +1,0 @@
-4th order PINN where we seek to approximate the hessian
-

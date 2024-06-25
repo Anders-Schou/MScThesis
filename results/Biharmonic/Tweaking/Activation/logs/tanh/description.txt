@@ -1,2 +1,0 @@
-tanh as activation function
-

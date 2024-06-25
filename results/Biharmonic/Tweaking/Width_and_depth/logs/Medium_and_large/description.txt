@@ -1,2 +1,0 @@
-2 layers with 256 neurons
-

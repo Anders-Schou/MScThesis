@@ -1,2 +1,0 @@
-Solving the double laplace problem with a single network with two outputs but with 4 layers
-

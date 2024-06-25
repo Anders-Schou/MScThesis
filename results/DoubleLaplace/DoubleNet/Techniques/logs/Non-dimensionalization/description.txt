@@ -1,2 +1,0 @@
-Non-dimensionalization with a factor equal to the tension with double network
-

@@ -1,2 +1,0 @@
-Generate exact number of collocation points and then generate extra points sampled densely near the circle
-

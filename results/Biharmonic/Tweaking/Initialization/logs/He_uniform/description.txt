@@ -1,2 +1,0 @@
-Using He uniform initialization
-
