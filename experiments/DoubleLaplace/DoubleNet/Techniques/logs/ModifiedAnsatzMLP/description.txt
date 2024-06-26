@@ -1,0 +1,2 @@
+Solving the double laplace problem with two networks with one output each, where the networks are using modified ansatz MLPs
+

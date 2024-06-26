@@ -1,0 +1,4 @@
+4 layers, 2x the points, using a solution ansatz and 100 data points
+
+4 layers, 2x the points, using a solution ansatz and 100 data points
+

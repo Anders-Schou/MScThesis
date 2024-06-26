@@ -1,0 +1,6 @@
+Solving the double laplace problem with two networks with one output each but with only 128 neurons in each 4 layers
+
+Solving the double laplace problem with two networks with one output each but with only 128 neurons in each 4 layers
+
+Solving the double laplace problem with two networks with one output each but with only 128 neurons in each 4 layers
+

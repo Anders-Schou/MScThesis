@@ -1,0 +1,2 @@
+4 layers, 2x the points, using a modified MLP
+

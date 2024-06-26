@@ -1,0 +1,4 @@
+4 layers, 1.5x the points, using a solution ansatz, reparam and 10 data points
+
+4 layers, 1.5x the points, using a solution ansatz, reparam and 10 data points
+

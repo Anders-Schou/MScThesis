@@ -1,0 +1,2 @@
+4 layers, 2x the points, using a solution ansatz - with idealized boundary conditions
+
