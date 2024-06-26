@@ -1,0 +1,6 @@
+1 layer with 128 neurons
+
+1 layer with 128 neurons
+
+1 layer with 128 neurons
+

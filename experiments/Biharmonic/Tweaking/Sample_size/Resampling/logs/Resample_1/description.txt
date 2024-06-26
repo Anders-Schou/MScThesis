@@ -1,0 +1,6 @@
+Resample 2000 new collocation points every 5000 epochs with loss emphasis 1
+
+Resample 2000 new collocation points every 5000 epochs with loss emphasis 1
+
+Resample 2000 new collocation points every 5000 epochs with loss emphasis 1
+

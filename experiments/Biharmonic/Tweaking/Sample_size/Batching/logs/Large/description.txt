@@ -1,0 +1,6 @@
+Using a batch size of 16384
+
+Using a batch size of 16384
+
+Using a batch size of 16384
+

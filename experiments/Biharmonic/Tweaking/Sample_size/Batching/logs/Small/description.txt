@@ -1,0 +1,6 @@
+Using a batch size of 4096
+
+Using a batch size of 4096
+
+Using a batch size of 4096
+

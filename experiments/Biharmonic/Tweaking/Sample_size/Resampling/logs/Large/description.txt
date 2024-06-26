@@ -1,0 +1,6 @@
+Resample collocation points every 5000 epochs, but 8000 collocation points
+
+Resample collocation points every 5000 epochs, but 8000 collocation points
+
+Resample collocation points every 5000 epochs, but 8000 collocation points
+
