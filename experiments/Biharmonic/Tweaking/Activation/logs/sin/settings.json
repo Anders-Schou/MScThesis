@@ -1,0 +1,155 @@
+{
+    "id": "sin",
+    "seed": 1234,
+    "description": "sin as activation function", 
+
+    "io": {
+        "base_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Tweaking/Activation",
+        "figure_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Tweaking/Activation/figures",
+        "model_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Tweaking/Activation/models",
+        "image_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Tweaking/Activation/images",
+        "log_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Tweaking/Activation/logs"
+    },
+    
+    "verbosity": {
+        "init": true,
+        "training": true,
+        "evaluation": true,
+        "plotting": true,
+        "sampling": true
+    },
+
+    "geometry": {
+        "domain": {
+            "rectangle": { "xlim": [-10.0, 10.0], "ylim": [-10.0, 10.0] },
+            "circle": { "center": [0.0, 0.0], "radius": 2.0 },
+            "type": "full"
+        }
+    },
+
+    "run": {
+        "train": {
+            "sampling": {
+                "coll": [8000, 0],
+                "rect": [500, 500, 500, 500],
+                "circ": 1000,
+                "data": [0, 0],
+                "do_plots": true
+            },
+            "iterations": 150000, 
+            "optimizer": "adam",
+            "loss_fn": "mse",
+            "update_scheme": "unweighted", 
+            "update_kwargs": {
+                "softadapt": {
+                    "order": 4,
+                    "beta": 0.1,
+                    "loss_weighted": true,
+                    "normalized": false,
+                    "update_every": 10,
+                    "running_average": 0.9
+                },
+                "gradnorm": {
+                    "normalized": true,
+                    "loss_weighted": true,
+                    "update_every": 10,
+                    "running_average": 0.9
+                },
+                "unweighted": {
+                    "normalized": true
+                },
+                "weighted": {
+                    "weights": [5, 5, 2],
+                    "normalized": false
+                }
+            },
+            "learning_rate": 1e-3,
+            "batch_size": -1,
+            "decay_rate": 0.95,
+            "decay_steps": 2000,
+            "transfer_learning": false,
+            "checkpoint_every": 1000,
+            "resampling": {
+                "do_resampling": false,
+                "resample_steps": 5000,
+                "resample_num": [100, 100],
+                "loss_emphasis": 2,
+                "replace": true
+            },
+            "jitted_update": true
+        },
+        "eval": {
+            "error_metric": "L2-rel",
+            "transfer_learning": false,
+            "sampling": {
+                "coll": [5000, 200],
+                "rect": [0, 0, 0, 0],
+                "circ": 0,
+                "data": [0, 0]
+            }
+        }
+    },
+
+    "model": {
+        "pinn": {
+            "network": [
+                {
+                    "architecture": "mlp",
+                    "specifications": {
+                        "input_dim": 2,
+                        "output_dim": 1,
+                        "hidden_dims": [256, 256],
+                        "activation": "sin",
+                        "initialization": "glorot_normal",
+                        "embed": null,
+                        "embed2": {"embed_scale": 1.0, "embed_dim": 128},
+                        "reparam": null,
+                        "reparam2": {"type": "weight_fact", "mean": 0.5, "stddev": 0.1},
+                        "nondim": null
+                    }
+                }
+            ]
+        }
+    },
+
+    "plotting": {
+        "sampling": {
+            "do_plots": true,
+            "plot_every": null,
+            "overwrite": false,
+            "file_extension": "png",
+            "kwargs": {
+                "coll": {
+                    "color": "blue",
+                    "s": 5
+                },
+                "rect": {
+                    "color": "green",
+                    "s": 5
+                },
+                "circ": {
+                    "color": "red",
+                    "s": 5
+                },
+                "data": {
+                    "color": "orange",
+                    "s": 5
+                }
+            }
+        },
+        "results": {
+            "do_plots": false,
+            "plot_every": -1,
+            "overwrite": false,
+            "file_extension": "png"
+        },
+        "dpi": 75,
+        "grid": 201
+    },
+
+    "logging": {
+        "do_logging": true,
+        "log_every": 100,
+        "print_every": 100
+    }
+}

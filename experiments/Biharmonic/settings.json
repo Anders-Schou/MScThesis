@@ -1,14 +1,14 @@
 {
-    "id": "ModifiedMLP_full_training",
+    "id": "Softadapt2",
     "seed": 1234,
-    "description": "Using a Modified MLP and running 150000 epochs", 
+    "description": "Using softadapt loss weights", 
 
     "io": {
-        "base_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Network_architectures",
-        "figure_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Network_architectures/figures",
-        "model_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Network_architectures/models",
-        "image_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Network_architectures/images",
-        "log_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Network_architectures/logs"
+        "base_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Tweaking/Loss_weighting",
+        "figure_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Tweaking/Loss_weighting/figures",
+        "model_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Tweaking/Loss_weighting/models",
+        "image_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Tweaking/Loss_weighting/images",
+        "log_dir": "/zhome/74/7/147523/MSc/experiments/Biharmonic/Tweaking/Loss_weighting/logs"
     },
     
     "verbosity": {
@@ -34,18 +34,20 @@
                 "rect": [500, 500, 500, 500],
                 "circ": 1000,
                 "data": [0, 0],
-                "do_plots": true
+                "do_plots": true,
+                "separate_coll": false
             },
             "iterations": 150000, 
             "optimizer": "adam",
             "loss_fn": "mse",
-            "update_scheme": "unweighted", 
+            "update_scheme": "softadapt", 
             "update_kwargs": {
                 "softadapt": {
                     "order": 4,
                     "beta": 0.1,
-                    "loss_weighted": true,
-                    "normalized": true,
+                    "loss_weighted": false,
+                    "normalized": false,
+                    "normalized_rates": true,
                     "update_every": 100,
                     "running_average": 0.9
                 },
@@ -94,13 +96,13 @@
         "pinn": {
             "network": [
                 {
-                    "architecture": "modifiedmlp",
+                    "architecture": "mlp",
                     "specifications": {
                         "input_dim": 2,
                         "output_dim": 1,
                         "hidden_dims": [256, 256],
                         "activation": "silu",
-                        "initialization": "he_normal",
+                        "initialization": "glorot_normal",
                         "embed": null,
                         "embed2": {"embed_scale": 1.0, "embed_dim": 128},
                         "reparam": null,
@@ -121,19 +123,23 @@
             "kwargs": {
                 "coll": {
                     "color": "blue",
-                    "s": 5
+                    "s": 5,
+                    "label": "Collocation points"
                 },
                 "rect": {
                     "color": "green",
-                    "s": 5
+                    "s": 5,
+                    "label": "Rectangle points"
                 },
                 "circ": {
                     "color": "red",
-                    "s": 5
+                    "s": 5,
+                    "label": "Circle points"
                 },
                 "data": {
                     "color": "orange",
-                    "s": 5
+                    "s": 5,
+                    "label": "_Data points"
                 }
             }
         },

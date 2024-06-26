@@ -96,7 +96,6 @@ class PINN01(BiharmonicPINN):
         shutil.copy(self.dir.settings_path, self.dir.log_dir)
         shutil.copy(sys.path[0] + '/main.py', self.dir.log_dir)
         
-        
         if new_init:
             del self.weights
             
@@ -149,19 +148,27 @@ if __name__ == "__main__":
     raw_settings = timer(parse_arguments)()
     pinn = timer(PINN01)(raw_settings)
     timer(pinn.sample_points)()
-    timer(pinn.train)()
-    timer(pinn.write_model)()
-    # timer(pinn.load_model)()
-    timer(pinn.plot_results)()
+    timer(pinn.plot_boundaries)()
+    # timer(pinn.train)()
+    # timer(pinn.write_model)()
+    # # timer(pinn.load_model)()
+    # timer(pinn.plot_results)()
     
-    t2 = perf_counter()
+    # t2 = perf_counter()
 
-    f = open(pinn.dir.log_dir.joinpath('time_and_eval.dat'), "w")
-    f.write(f'Time taken for the whole training process: {t2-t1:.1f} s \t or \t {(t2-t1)/60.0:.1f} min\n')
+    # f = open(pinn.dir.log_dir.joinpath('time_and_eval.dat'), "w")
+    # f.write(f'Time taken for the whole training process: {t2-t1:.1f} s \t or \t {(t2-t1)/60.0:.1f} min\n')
     
-    for metric_fun in ["mse", "maxabse", "L2rel"]:
-        timer(pinn.eval)(metric=metric_fun)
+    # timer(pinn.sample_eval_points)()
+    
+    # for metric_fun in ["mse", "maxabse", "L2rel"]:
+    #     timer(pinn.eval)(metric=metric_fun)
         
-        f.write(f'{metric_fun} xx error: {pinn.eval_result[metric_fun][0, 0]:.4f}\n')
-        f.write(f'{metric_fun} xy error: {pinn.eval_result[metric_fun][0, 1]:.4f}\n')
-        f.write(f'{metric_fun} yy error: {pinn.eval_result[metric_fun][1, 1]:.4f}\n')
+    #     f.write(f'{metric_fun} xx error: {pinn.eval_result[metric_fun][0, 0]:.4f}\n')
+    #     f.write(f'{metric_fun} xy error: {pinn.eval_result[metric_fun][0, 1]:.4f}\n')
+    #     f.write(f'{metric_fun} yy error: {pinn.eval_result[metric_fun][1, 1]:.4f}\n')
+    
+    # for metric_fun in ["mse", "maxabse", "L2rel"]:
+    #     vm_error = pinn.eval(metric=metric_fun, cartesian=False)
+            
+    #     f.write(f'{metric_fun} vm_stress error: {vm_error:.4f}\n')
