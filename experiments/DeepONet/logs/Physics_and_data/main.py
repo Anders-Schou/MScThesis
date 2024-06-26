@@ -13,9 +13,20 @@ from flax.linen import Sequential
 from models.loss import ms, mse, sq, sqe
 from models.networks import netmap
 from models.platewithhole.deeponet import BiharmonicDeepONet
+from models.platewithhole import analytic
 from setup.parsers import parse_arguments
 from utils.utils import timer, get_gpu_model
 from utils.checkpoint import write_model, load_model
+
+from datahandlers.generators import (
+    generate_collocation_points,
+    generate_rectangle_with_hole,
+    generate_collocation_points_with_hole,
+    generate_rectangle_points,
+    resample,
+    resample_idx,
+    JaxDataset
+)
 
 # jax.config.update("jax_enable_x64", True)
 
@@ -24,6 +35,58 @@ class DeepONet(BiharmonicDeepONet):
         super().__init__(settings)
         self._set_loss(loss_term_fun_name="loss_terms")
         return
+
+    def sample_points(self):
+        """
+        Method used for sampling points on boundaries and in domain.
+        """
+
+        self._key, train_branch_key, eval_branch_key, train_trunk_key, eval_trunk_key, dataset_key, perm_key = jax.random.split(self._key, 7)
+        radius = self.geometry_settings["domain"]["circle"]["radius"]
+        tension_interval = self.geometry_settings["trunk"]["tension_interval"]
+        num_sensors = self.train_settings.sampling["num_sensors"]
+        xlim = self.geometry_settings["domain"]["rectangle"]["xlim"]
+        ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
+        train_sampling = self.train_settings.sampling if self.do_train is not None else None
+        eval_sampling = self.eval_settings.sampling if self.do_eval is not None else None
+        
+        num_branch = train_sampling["branch"]
+        self.train_branch_tensions = jax.random.permutation(perm_key, jnp.linspace(tension_interval[0], tension_interval[1], num_branch))
+        self.train_branch_points = generate_rectangle_points(train_branch_key, xlim, ylim, [num_sensors // 4]*4, radius=radius)
+        
+        # Sampling points in domain and on boundaries
+        self.train_trunk_points = generate_rectangle_with_hole(train_trunk_key, radius, xlim, ylim,
+                                                        train_sampling["coll"],
+                                                        train_sampling["rect"],
+                                                        train_sampling["circ"])
+        self.eval_trunk_points = generate_rectangle_with_hole(eval_trunk_key, radius, xlim, ylim,
+                                                        eval_sampling["coll"],
+                                                        eval_sampling["rect"],
+                                                        eval_sampling["circ"])
+        
+        # Keys for data points
+        self._key, data_train_key, data_eval_key = jax.random.split(self._key, 3)
+        self.train_trunk_points["data"] = generate_collocation_points_with_hole(data_train_key, radius,
+                                                                          xlim, ylim, train_sampling.get("data"))
+        self.eval_trunk_points["data"] = generate_collocation_points_with_hole(data_eval_key, radius,
+                                                                         xlim, ylim, eval_sampling.get("data"))
+
+        self.full_batch_dataset = JaxDataset(key=dataset_key, xy=self.train_trunk_points["coll"], u = None, batch_size=sum(train_sampling["coll"]) // num_branch)
+        
+        # self.plot_training_points()
+        return
+
+    def get_branch_inputs(self, inputs, tension):
+        true_rect = [jax.vmap(analytic.cart_stress_true, in_axes=(0, None, None))(inputs[i], tension, self.geometry_settings["domain"]["circle"]["radius"]) for i in range(4)]
+
+        return jnp.array((true_rect[0][:, 1, 1],
+                         -true_rect[0][:, 0, 1],
+                          true_rect[1][:, 0, 0],
+                         -true_rect[1][:, 1, 0],
+                          true_rect[2][:, 1, 1],
+                         -true_rect[2][:, 0, 1],
+                          true_rect[3][:, 0, 0],
+                         -true_rect[3][:, 1, 0]))
 
     def loss_terms(self,
                    params,
@@ -122,14 +185,20 @@ class DeepONet(BiharmonicDeepONet):
                              true_val=self.train_true_val[0], 
                              update_key=update_key)
             
-            for batch_num in range(num_batches):
+            for batch_num, (xy_batch, u_batch) in enumerate(iter(self.full_batch_dataset)):
+                
+                tension = self.branch_tensions[batch_num]
+                self.train_points_trunk["coll"] = xy_batch
+                self.train_true_val_batch = analytic.get_true_vals(self.train_points_trunk, exclude=["diri"], tension=tension)
+                branch_inputs = analytic.get_true_vals(self.train_points_branch, tension=tension)
+            
                 # Update step
                 self.params, self.opt_state, total_loss, loss_terms = self.update(opt_state=self.opt_state,
                                                                                                 params=self.params,
-                                                                                                branch_inputs=self.train_points_branch[batch_num],
-                                                                                                trunk_inputs=self.train_points_trunk[batch_num],
+                                                                                                branch_inputs=branch_inputs,
+                                                                                                trunk_inputs=self.train_points_trunk,
                                                                                                 weights=self.weights,
-                                                                                                true_val=self.train_true_val[batch_num],
+                                                                                                true_val=self.train_true_val_batch,
                                                                                                 update_key=update_key,
                                                                                                 start_time=t0,
                                                                                                 epoch=epoch,

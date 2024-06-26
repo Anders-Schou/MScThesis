@@ -149,7 +149,7 @@ if __name__ == "__main__":
     raw_settings = timer(parse_arguments)()
     deeponet = timer(DeepONet)(raw_settings)
     timer(deeponet.sample_points)()
-    timer(deeponet.train)(update_key=2)
+    timer(deeponet.train)(update_key=None)
     timer(deeponet.write_model)()
     # timer(deeponet.load_model)()
     timer(deeponet.plot_results)()

@@ -1,0 +1,2 @@
+Training a DeepONet using data only
+

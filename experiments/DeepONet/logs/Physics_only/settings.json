@@ -1,7 +1,7 @@
 {
-    "id": "Physics_and_data",
+    "id": "Physics_only",
     "seed": 1234,
-    "description": "Training a DeepONet using physics and data",
+    "description": "Training a DeepONet using physics only",
 
     "io": {
         "base_dir": "/zhome/74/7/147523/MSc/experiments/DeepONet",
@@ -22,7 +22,7 @@
     "geometry": {
         "domain": {
             "rectangle": { "xlim": [-10.0, 10.0], "ylim": [-10.0, 10.0] },
-            "circle": { "center": [0.0, 0.0], "radius": 2.0}
+            "circle": { "center": [0.0, 0.0]}
         },
         "trunk": {
             "radius_interval": [1.0, 3.0],
@@ -36,9 +36,8 @@
                 "coll": [8000, 0],
                 "rect": [500, 500, 500, 500],
                 "circ": 1000,
-                "data": [10000, 0],
-                "branch": 500,
-                "num_sensors_per_side": 20
+                "data": [0, 0],
+                "branch": 500
             },
             "iterations": 100,
             "optimizer": "adam",

@@ -38,7 +38,7 @@
                 "circ": 1000,
                 "data": [10000, 0],
                 "branch": 500,
-                "num_sensors_per_side": 20
+                "num_sensors": 20
             },
             "iterations": 100,
             "optimizer": "adam",
