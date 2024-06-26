@@ -1,25 +1,29 @@
-#!/bin/bash 
-#BSUB -J elasticity
-#BSUB -q gpua100
-#BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -n 4
-#BSUB -W 8:00
+#!/bin/bash
+
+#BSUB -J PINNjob
+
+#BSUB -q hpc
+#BSUB -n 16
+#BSUB -W 4:00
+#BSUB -R "rusage[mem=128MB]"
 #BSUB -R "span[hosts=1]"
-#BSUB -R "rusage[mem=4096MB]"
-#BSUB -o Job_out/elasticity_%J.out
-#BSUB -e Job_err/elasticity_%J.err
-#BSUB -N
+#BSUB -R "select[model==XeonGold6342]"
 
-# Load modules
-module load python3/3.12.1
-module load cuda/12.3.2
-module load cudnn/v8.9.1.23-prod-cuda-12.X 
+#BSUB -o PINNjob_%J.out
+#BSUB -e PINNjob_%J.err
 
-# Activate virtual environment
-. ~/venv_MSc/bin/activate
+#BSUB -q hpcintro
+#BSUB -n 160
+#BSUB -R "span[block=20]"
+##BSUB -R "select[hname!='n-62-28-1']"
+##BSUB -R "select[hname!='n-62-28-2']"
+##BSUB -R "select[hname!='n-62-28-3']"
+##BSUB -R "select[hname!='n-62-28-4']"
+#BSUB -W 1:00
+#BSUB -R "rusage[mem=6GB]"
+#BSUB -J profiling
+#BSUB -o Jobs/stdout/%J.out
+#BSUB -e Jobs/stderr/%J.err
 
 
-export PYTHONPATH="${PYTHONPATH}:/zhome/74/7/147523/MSc"
-
-# Run script with chosen options
-. run.sh DoubleLaplace
+export PYTHONPATH="${PYTHONPATH}:/zhome/e8/9/147091/venv_02687/lib/python3.12/site-packages/"
