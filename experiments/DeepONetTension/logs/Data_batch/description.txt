@@ -1,0 +1,2 @@
+Training a DeepONet using data in the same way that collocation points are used to train
+
