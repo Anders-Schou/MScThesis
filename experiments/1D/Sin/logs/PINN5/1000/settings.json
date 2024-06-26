@@ -1,0 +1,136 @@
+{
+    "id": "PINN",
+    "seed": 1234,
+    "description": "PINN Tests",
+    "update_key": 5,
+
+    "io": {
+        "base_dir": "/zhome/74/7/147523/MSc/experiments/1D/Sin",
+        "figure_dir": "/zhome/74/7/147523/MSc/experiments/1D/Sin/figures",
+        "model_dir": "/zhome/74/7/147523/MSc/experiments/1D/Sin/models",
+        "image_dir": "/zhome/74/7/147523/MSc/experiments/1D/Sin/images",
+        "log_dir": "/zhome/74/7/147523/MSc/experiments/1D/Sin/logs"
+    },
+
+    "io2": {
+        "base_dir": "/zhome/74/7/147523/MSc/experiments/1D/ExpSin",
+        "figure_dir": "/zhome/74/7/147523/MSc/experiments/1D/ExpSin/figures",
+        "model_dir": "/zhome/74/7/147523/MSc/experiments/1D/ExpSin/models",
+        "image_dir": "/zhome/74/7/147523/MSc/experiments/1D/ExpSin/images",
+        "log_dir": "/zhome/74/7/147523/MSc/experiments/1D/ExpSin/logs"
+    },
+
+    "geometry": {
+        "domain": {
+            "interval": { "xlim": [-10.0, 10.0]}
+        }
+    },
+
+    "run": {
+        "train": {
+            "sampling": {
+                "coll": 1000
+            },
+            "iterations": 150000,
+            "early_stop_tol": 1e-2,
+            "optimizer": "adam",
+            "update_scheme": "unweighted", 
+            "update_kwargs": {
+                "softadapt": {
+                    "order": 4,
+                    "beta": 0.1,
+                    "loss_weighted": true,
+                    "normalized": false,
+                    "update_every": 10,
+                    "running_average": 0.9
+                },
+                "gradnorm": {
+                    "normalized": true,
+                    "update_every": 10,
+                    "running_average": 0.9
+                },
+                "unweighted": {
+                    "normalized": false
+                },
+                "weighted": {
+                    "weights": [5, 5, 2],
+                    "normalized": false
+                }
+            },
+            "learning_rate": 1e-3,
+            "batch_size": null,
+            "decay_rate": 0.95,
+            "decay_steps": 2000,
+            "transfer_learning": false,
+            "resampling": {
+                "do_resampling": false,
+                "resample_steps": 5000,
+                "resample_num": [100, 100],
+                "loss_emphasis": 2,
+                "replace": true
+            },
+            "jitted_update": true
+        },
+        "eval": {
+            "error_metric": "L2-rel",
+            "transfer_learning": false,
+            "sampling": {
+                "coll": 200
+            }
+        }
+    },
+
+    "model": {
+        "pinn": {
+            "network": [
+                {
+                    "architecture": "mlp",
+                    "specifications": {
+                        "input_dim": 1,
+                        "output_dim": 1,
+                        "hidden_dims": [32, 32, 32, 32],
+                        "activation": "tanh",
+                        "initialization": "glorot_normal"
+                    }
+                }
+            ]
+        }
+    },
+
+    "plotting": {
+        "sampling": {
+            "do_plots": true,
+            "plot_every": null,
+            "overwrite": false,
+            "file_extension": "png",
+            "kwargs": {
+                "coll": {
+                    "color": "blue",
+                    "s": 5
+                },
+                "rect": {
+                    "color": "green",
+                    "s": 5
+                },
+                "circ": {
+                    "color": "red",
+                    "s": 5
+                }
+            }
+        },
+        "results": {
+            "do_plots": true,
+            "plot_every": 5000,
+            "overwrite": false,
+            "file_extension": "png"
+        },
+        "dpi": 75,
+        "grid": 201
+    },
+
+    "logging": {
+        "do_logging": true,
+        "log_every": 200,
+        "print_every": 1000
+    }
+}
