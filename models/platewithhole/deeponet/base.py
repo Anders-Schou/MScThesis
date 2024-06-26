@@ -9,8 +9,10 @@ from datahandlers.generators import (
     generate_collocation_points,
     generate_rectangle_with_hole,
     generate_collocation_points_with_hole,
+    generate_rectangle_points,
     resample,
-    resample_idx
+    resample_idx,
+    JaxDataset
 )
 from models import DeepONet
 from models.derivatives import hessian
@@ -18,7 +20,7 @@ from models.networks import deeponetmap
 from models.platewithhole import analytic
 from models.platewithhole import loss as pwhloss
 from models.platewithhole import plotting_deeponet as pwhplot
-from models.loss import L2rel
+from models.loss import L2rel, mse, maxabse
 from utils.transforms import (
     vrtheta2xy,
     vxy2rtheta
@@ -239,35 +241,48 @@ class PlateWithHoleDeepONet(DeepONet):
                                                          eval_sampling["coll"],
                                                          eval_sampling["rect"],
                                                          eval_sampling["circ"])
+        
+        self.plot_training_points()
         return
     
-    def eval(self, point_type: str = "coll", metric: str  = "L2-rel", **kwargs):
+    def eval(self, cartesian: bool = True, point_type: str = "coll", metric: str  = "L2-rel", **kwargs):
         """
         Evaluates the Cartesian stresses using the specified metric.
         """
         match metric.lower():
             case "l2-rel":
                 metric_fun = jax.jit(L2rel)
+            case "l2rel":
+                metric_fun = jax.jit(L2rel)
+            case "mse":
+                metric_fun = jax.jit(mse)
+            case "maxabse":
+                metric_fun = jax.jit(maxabse)
             case _:
                 print(f"Unknown metric: '{metric}'. Default ('L2-rel') is used for evaluation.")
                 metric_fun = jax.jit(L2rel)
 
         u = jnp.squeeze(deeponetmap(self.jitted_hessian)(self.params, self.eval_points_branch, self.eval_points_trunk[point_type]))
-        u_true = jax.vmap(partial(analytic.cart_stress_true, a=self.eval_points_branch[0], S=self.eval_points_branch[1]))(self.eval_points_trunk[point_type])
+        if cartesian:
+            u_true = jax.vmap(partial(analytic.cart_stress_true, **kwargs))(self.eval_points_trunk[point_type])
 
-        err = jnp.array([[metric_fun(u[:, i, j], u_true[:, i, j]) for i in range(2)] for j in range(2)])
+            err = jnp.array([[metric_fun(u[:, i, j], u_true[:, i, j]) for i in range(2)] for j in range(2)])
 
-        attr_name = "eval_result"
+            attr_name = "eval_result"
 
-        if hasattr(self, attr_name):
-            if isinstance(self.eval_result, dict):
-                self.eval_result[metric] = err
+            if hasattr(self, attr_name):
+                if isinstance(self.eval_result, dict):
+                    self.eval_result[metric] = err
+                else:
+                    raise TypeError(f"Attribute '{attr_name}' is not a dictionary. "
+                                    f"Evaluation error cannot be added.")
             else:
-                raise TypeError(f"Attribute '{attr_name}' is not a dictionary. "
-                                f"Evaluation error cannot be added.")
+                self.eval_result = {metric: err}
         else:
-            self.eval_result = {metric: err}
-        
+            vm_stress_true = jax.vmap(partial(analytic.von_mises_stress_true, **kwargs))(self.eval_points_trunk[point_type])
+            vm_stress = jnp.sqrt(u[:, 0, 0]**2 + u[:, 1, 1]**2 - u[:, 0, 0]*u[:, 1, 1] + 3*u[:, 0, 1]**2)
+
+            err = metric_fun(vm_stress, vm_stress_true)
         return err
     
     def plot_results(self, save=True, log=False, step=None):

@@ -212,6 +212,10 @@ def parse_MLP_settings(settings_dict: dict) -> dict:
     # Only Polar coordinates
     if settings_dict.get("only_polar") is not None:
         settings.only_polar = settings_dict["only_polar"]
+        
+    # Activate last layer
+    if settings_dict.get("activate_last_layer") is not None:
+        settings.activate_last_layer = settings_dict["activate_last_layer"]
 
     return settings2dict(settings)
 

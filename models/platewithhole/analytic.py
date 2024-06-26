@@ -63,7 +63,7 @@ def principal_stress_true(coords, polar = False, S = _TENSION, a = _RADIUS):
 
 def von_mises_stress_true(coords, S = _TENSION, a = _RADIUS):
     p = cart_stress_true(coords, S=S, a=a)
-    return jnp.sqrt([0, 0]**2 + p[1, 1]**2 - p[0, 0]*p[1, 1] + 3*p[0, 1]**2)
+    return jnp.sqrt(p[0, 0]**2 + p[1, 1]**2 - p[0, 0]*p[1, 1] + 3*p[0, 1]**2)
 
 
 def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | None],
@@ -115,7 +115,8 @@ def get_true_vals(points: dict[str, jax.Array | tuple[dict[str, jax.Array]] | No
     if "rect" not in exclude:
         
         true_rect = [jax.vmap(cart_stress_true, in_axes=(0, None, None))(points["rect"][i], tension, radius) for i in range(4)]
-
+        
+        # xx0 corresponds to the true value of phi_xx at the lower boundary
         rect = {
                 "xx0":  true_rect[0][:, 1, 1],
                 "xy0": -true_rect[0][:, 0, 1],

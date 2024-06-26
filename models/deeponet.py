@@ -118,12 +118,26 @@ class DeepONet(Model):
     @timer
     def plot_training_points(self, save=True, log=False, step=None):
         plt.figure()
-        _ = jtu.tree_map_with_path(lambda x, y: plt.scatter(np.array(y)[:,0], np.array(y)[:,1], **self.sample_plots.kwargs[x[0].key]), OrderedDict(self.train_points))
+        
+        plt.scatter(self.eval_points_branch[0], self.eval_points_branch[1], color="orange", s=100)
+        
+        plt.scatter(self.train_points_branch[:, 0], self.train_points_branch[:, 1])
         
         if save:
-            save_fig(self.dir.figure_dir, "training_points.png", "png", plt.gcf())
+            save_fig(self.dir.figure_dir, "training_points_branch", "png", plt.gcf())
         
         if log:
-            log_figure(fig=plt.gcf(), name="training_points", log_dir=self.dir.log_dir, step=step)
+            log_figure(fig=plt.gcf(), name="training_points_branch", log_dir=self.dir.log_dir, step=step)
+            
+        plt.close()
+        
+        plt.figure()
+        _ = jtu.tree_map_with_path(lambda x, y: plt.scatter(np.array(y)[:,0], np.array(y)[:,1], **self.sample_plots.kwargs[x[0].key]), OrderedDict(self.train_points_trunk[0]))
+        
+        if save:
+            save_fig(self.dir.figure_dir, "training_points_trunk", "png", plt.gcf())
+        
+        if log:
+            log_figure(fig=plt.gcf(), name="training_points_trunk", log_dir=self.dir.log_dir, step=step)
             
         plt.close()

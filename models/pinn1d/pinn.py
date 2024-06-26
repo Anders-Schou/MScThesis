@@ -339,6 +339,9 @@ class PINN1D(PINN):
         return
         
     def plot_derivatives(self):
+        rc("text", usetex=True)
+        rc('text.latex', preamble=r'\usepackage{amsmath}')
+        
         xlim = self.geometry_settings["domain"]["interval"]["xlim"]
         xx = jnp.linspace(xlim[0], xlim[1], 501)
         true_vals = self.get_true_vals(xx)
@@ -347,55 +350,69 @@ class PINN1D(PINN):
         plot_data1 = [true_vals[str(i)].ravel() for i in range(5)]
         plot_data2 = [jnp.abs(plot_data0[i] - plot_data1[i]) for i in range(5)]
         
-        fig = plt.figure()
-        for i in range(5):
-            plt.plot(xx, plot_data0[i])
-        plt.legend([r"$\hat u_{" + "x"*i + "}$" for i in range(5)])
-        plt.xlabel("x")
-        save_fig(self.dir.figure_dir, "diff.pdf", format="pdf", fig=fig)
+        # fig = plt.figure()
+        # for i in range(5):
+        #     plt.plot(xx, plot_data0[i])
+        # plt.legend([r"$\hat u_{" + "x"*i + "}$" for i in range(5)])
+        # plt.xlabel("x")
+        # save_fig(self.dir.figure_dir, "diff.pdf", format="pdf", fig=fig)
         
-        fig = plt.figure()
-        for i in range(5):
-            plt.plot(xx, plot_data1[i])
-        plt.legend([r"$u_{" + "x"*i + "}$" for i in range(5)])
-        plt.xlabel("x")
-        save_fig(self.dir.figure_dir, "diff_true.pdf", format="pdf", fig=fig)
+        # fig = plt.figure()
+        # for i in range(5):
+        #     plt.plot(xx, plot_data1[i])
+        # plt.legend([r"$u_{" + "x"*i + "}$" for i in range(5)])
+        # plt.xlabel("x")
+        # save_fig(self.dir.figure_dir, "diff_true.pdf", format="pdf", fig=fig)
 
-        fig = plt.figure()
-        for i in range(5):
-            plt.semilogy(xx, plot_data2[i])
-        plt.legend([r"$|\hat u_{" + "x"*i + "} - u_{" + "x"*i + "}|$" for i in range(5)])
-        plt.xlabel("x")
-        save_fig(self.dir.figure_dir, "diff_error.pdf", format="pdf", fig=fig)
+        # fig = plt.figure()
+        # for i in range(5):
+        #     plt.semilogy(xx, plot_data2[i])
+        # plt.legend([r"$|\hat u_{" + "x"*i + "} - u_{" + "x"*i + "}|$" for i in range(5)])
+        # plt.xlabel("x")
+        # save_fig(self.dir.figure_dir, "diff_error.pdf", format="pdf", fig=fig)
 
 
-        fig, ax = plt.subplots(1, 3, figsize=(35, 10))
+        fig, ax = plt.subplots(5, 3, figsize=(30, 50))
         for i in range(5):
-            ax[0].plot(xx, plot_data0[i])
-        ax[0].legend([r"$\hat u$"] + [r"$\partial_{" + "x"*i + r"}\hat u$" for i in range(1,5)], fontsize=25, loc="lower left")
-        ax[0].set_ylim(min([min(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]), max([max(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]))
-        ax[0].set_xlim(self.geometry_settings["domain"]["interval"]["xlim"])
-        ax[0].set_box_aspect(1)
-        
-        for i in range(5):
-            ax[1].plot(xx, plot_data1[i])
-        ax[1].legend(["$u$"] + [r"$\partial_{" + "x"*i + "}u$" for i in range(1, 5)], fontsize=25, loc="lower left")
-        ax[1].set_ylim(min([min(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]), max([max(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]))
-        ax[1].set_xlim(self.geometry_settings["domain"]["interval"]["xlim"])
-        ax[1].set_box_aspect(1)
+            ax[i, 0].plot(xx, plot_data0[i])
+            if i == 0:
+                ax[i, 0].legend([r"$\hat u$"], fontsize=25, loc="lower left")
+            else:
+                ax[i, 0].legend([r"$\partial_{" + r"x"*i + r"}\hat u$"], fontsize=25, loc="lower left")
+            ax[i, 0].set_ylim(min([min(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]), max([max(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]))
+            ax[i, 0].set_xlim(self.geometry_settings["domain"]["interval"]["xlim"])
+            ax[i, 0].set_box_aspect(1)
         
         for i in range(5):
-            ax[2].semilogy(xx, plot_data2[i])
-        ax[2].legend([r"$|\hat u - u|$"] + [r"$|\partial_{" + "x"*i + r"}\hat u - \partial_{" + "x"*i + "}u|$" for i in range(1, 5)], fontsize=25, loc="lower left")
-        ax[2].set_ylim(min([min(data) for data in plot_data2])/10, max([max(data) for data in plot_data2])*10)
-        ax[2].set_xlim(self.geometry_settings["domain"]["interval"]["xlim"])
-        ax[2].set_box_aspect(1)
+            ax[i, 1].plot(xx, plot_data1[i])
+            if i == 0:
+                ax[i, 1].legend([r"$u$"], fontsize=25, loc="lower left")
+            else:
+                ax[i, 1].legend([r"$\partial_{" + r"x"*i + r"}u$"], fontsize=25, loc="lower left")
+            ax[i, 1].set_ylim(min([min(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]), max([max(data - (min(data)+max(data))/2)*2 + (min(data)+max(data))/2 for data in plot_data1]))
+            ax[i, 1].set_xlim(self.geometry_settings["domain"]["interval"]["xlim"])
+            ax[i, 1].set_box_aspect(1)
+        
+        for i in range(5):
+            ax[i, 2].semilogy(xx, plot_data2[i])
+            if i == 0:
+                ax[i, 2].legend([r"$|\hat u - u|$"], fontsize=25, loc="lower left")
+            else:
+                ax[i, 2].semilogy(xx, plot_data2[i-1], '--')
+                if i == 1:
+                    ax[i, 2].legend([r"$|\partial_{" + r"x"*i + r"}\hat u - \partial_{" + r"x"*i + r"}u|$", r"$|\hat u - u|$"], fontsize=25, loc="lower left")
+                else:
+                    ax[i, 2].legend([r"$|\partial_{" + r"x"*i + r"}\hat u - \partial_{" + r"x"*i + r"}u|$", r"$|\partial_{" + r"x"*(i-1) + r"}\hat u - \partial_{" + r"x"*(i-1) + r"}u|$"], fontsize=25, loc="lower left")
+            ax[i, 2].set_ylim(min([min(data) for data in plot_data2])/10, max([max(data) for data in plot_data2])*10)
+            ax[i, 2].set_xlim(self.geometry_settings["domain"]["interval"]["xlim"])
+            ax[i, 2].set_box_aspect(1)
         
         titles = ["Prediction", "True solution", "Absolute error"]
         for c in range(3):
-            ax[c].set_title(titles[c], fontsize=50)
-            ax[c].set_xlabel(r"$x$", fontsize=40)
-            ax[c].tick_params(labelsize=25)
+            ax[0, c].set_title(titles[c], fontsize=50)
+            ax[4, c].set_xlabel(r"$x$", fontsize=40)
+            for r in range(5):
+                ax[r, c].tick_params(labelsize=25)
         
         save_fig(self.dir.figure_dir, "diff_all.pdf", format="pdf", fig=fig)
         

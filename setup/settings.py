@@ -207,6 +207,7 @@ class MLPSettings(Settings):
     nondim: float | None = None
     polar: bool = False
     only_polar: bool = False
+    activate_last_layer: bool = False
 
 
 @dataclass

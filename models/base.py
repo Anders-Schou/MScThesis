@@ -376,12 +376,10 @@ class Model(metaclass=ABCMeta):
     def _initialized(self) -> bool:
         has_params = hasattr(self, "params")
         has_train_points = hasattr(self, "train_points")
-        has_train_points_branch = hasattr(self, "train_points_branch")
         has_train_points_trunk = hasattr(self, "train_points_trunk")
         has_eval_points = hasattr(self, "eval_points")
-        has_eval_points_branch = hasattr(self, "eval_points_branch")
         has_eval_points_trunk = hasattr(self, "eval_points_trunk")
-        return has_params and (has_train_points or (has_train_points_branch and has_train_points_trunk)) and (has_eval_points or (has_eval_points_branch and has_eval_points_trunk))
+        return has_params and (has_train_points or (has_train_points_trunk)) #and (has_eval_points or (has_eval_points_branch and has_eval_points_trunk))
 
  
     @abstractmethod
@@ -496,7 +494,8 @@ class Model(metaclass=ABCMeta):
         # if hasattr (self, "loss_names"):
         #     plt.legend(self.loss_names, fontsize=25, framealpha=1.0)
         # else:
-        plt.legend(list(loss_map.keys()), fontsize=25, framealpha=1.0)
+        plt.legend(list(loss_map.keys()), fontsize=25, framealpha=1.0, loc="upper right")
+        # plt.ylim(8e-7, 1e1)
         ax = fig.gca()
         ax.set_xticks(np.linspace(0, max(ll), 11, dtype=np.int32))
         ax.set_xticklabels(np.linspace(0, max(ll), 11, dtype=np.int32), fontsize=25)

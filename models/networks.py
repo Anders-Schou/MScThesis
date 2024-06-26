@@ -76,6 +76,7 @@ class MLP(nn.Module):
     nondim: float | None = None
     polar: bool = False
     only_polar: bool = False
+    activate_last_layer: bool = False
 
     @nn.compact
     def __call__(self, input, transform = None):
@@ -112,6 +113,9 @@ class MLP(nn.Module):
                       kernel_init=self.initialization[-1](),
                       name=f"{self.name}_linear_output",
                       reparam=self.reparam)(x)
+        
+        if self.activate_last_layer:
+            x = self.activation[i](x)
         
         return x
 
@@ -168,6 +172,8 @@ class BiharmonicAnsatzMLP(nn.Module):
     reparam: dict | None = None
     nondim: float | None = None
     polar: bool = False
+    only_polar: bool = False
+    activate_last_layer: bool = False
 
     @nn.compact
     def __call__(self, input, transform = None):
@@ -181,7 +187,8 @@ class BiharmonicAnsatzMLP(nn.Module):
                 embed=self.embed,
                 reparam=self.reparam,
                 nondim=self.nondim,
-                polar=self.polar
+                polar=self.polar,
+                only_polar=self.only_polar
                 )(input, transform=transform)
         res = MLP(name=self.name+"_res",
                   input_dim=self.input_dim,
@@ -192,7 +199,8 @@ class BiharmonicAnsatzMLP(nn.Module):
                   embed=self.embed,
                   reparam=self.reparam,
                   nondim=self.nondim,
-                  polar=self.polar
+                  polar=self.polar,
+                  only_polar=self.only_polar
                   )(input, transform=transform)
 
         # Constrain network to 0 on boundary of [-10, 10] x [-10, 10]
@@ -215,10 +223,55 @@ class DoubleMLP(nn.Module):
     nondim: float | None = None
     polar: bool = False
     only_polar: bool = False
+    activate_last_layer: bool = False
         
     @nn.compact
     def __call__(self, input, transform = None):
         phi = MLP(name=self.name+"_phi", 
+                           input_dim=self.input_dim, 
+                           output_dim=self.output_dim, 
+                           hidden_dims=self.hidden_dims, 
+                           activation=self.activation,
+                           initialization=self.initialization,
+                           embed=self.embed,
+                           reparam=self.reparam,
+                           nondim=self.nondim,
+                           polar=self.polar,
+                           only_polar=self.only_polar
+                           )(input, transform=transform)
+        
+        psi = MLP(name=self.name+"_psi",
+                           input_dim=self.input_dim, 
+                           output_dim=self.output_dim, 
+                           hidden_dims=self.hidden_dims, 
+                           activation=self.activation,
+                           initialization=self.initialization,
+                           embed=self.embed,
+                           reparam=self.reparam,
+                           nondim=self.nondim,
+                           polar=self.polar,
+                           only_polar=self.only_polar
+                           )(input, transform=transform)
+        return jnp.array([phi, psi])
+    
+    
+class DoubleAnsatzMLP(nn.Module):
+    name: str
+    input_dim: int
+    output_dim: int
+    hidden_dims: Sequence[int]
+    activation: Sequence[Callable]
+    initialization: Sequence[Callable]
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
+    polar: bool = False
+    only_polar: bool = False
+    activate_last_layer: bool = False
+        
+    @nn.compact
+    def __call__(self, input, transform = None):
+        phi = BiharmonicAnsatzMLP(name=self.name+"_phi", 
                            input_dim=self.input_dim, 
                            output_dim=self.output_dim, 
                            hidden_dims=self.hidden_dims, 
@@ -258,6 +311,7 @@ class ModifiedMLP(nn.Module):
     nondim: float | None = None
     polar: bool = False
     only_polar: bool = False
+    activate_last_layer: bool = False
 
     @nn.compact
     def __call__(self, input, transform = None):
@@ -309,6 +363,144 @@ class ModifiedMLP(nn.Module):
                       reparam=self.reparam)(x)
         
         return x
+
+
+class DoubleModifiedMLP(nn.Module):
+    name: str
+    input_dim: int
+    output_dim: int
+    hidden_dims: Sequence[int]
+    activation: Sequence[Callable]
+    initialization: Sequence[Callable]
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
+    polar: bool = False
+    only_polar: bool = False
+    activate_last_layer: bool = False
+        
+    @nn.compact
+    def __call__(self, input, transform = None):
+        phi = ModifiedMLP(name=self.name+"_phi", 
+                           input_dim=self.input_dim, 
+                           output_dim=self.output_dim, 
+                           hidden_dims=self.hidden_dims, 
+                           activation=self.activation,
+                           initialization=self.initialization,
+                           embed=self.embed,
+                           reparam=self.reparam,
+                           nondim=self.nondim,
+                           polar=self.polar,
+                           only_polar=self.only_polar
+                           )(input, transform=transform)
+        
+        psi = MLP(name=self.name+"_psi",
+                           input_dim=self.input_dim, 
+                           output_dim=self.output_dim, 
+                           hidden_dims=self.hidden_dims, 
+                           activation=self.activation,
+                           initialization=self.initialization,
+                           embed=self.embed,
+                           reparam=self.reparam,
+                           nondim=self.nondim,
+                           polar=self.polar,
+                           only_polar=self.only_polar
+                           )(input, transform=transform)
+        return jnp.array([phi, psi])
+
+
+class BiharmonicModifiedAnsatzMLP(nn.Module):
+    name: str
+    input_dim: int
+    output_dim: int
+    hidden_dims: Sequence[int]
+    activation: Sequence[Callable]
+    initialization: Sequence[Callable]
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
+    polar: bool = False
+    only_polar: bool = False
+    activate_last_layer: bool = False
+
+    @nn.compact
+    def __call__(self, input, transform = None):
+        y = input
+        x = ModifiedMLP(name=self.name+"_nn", 
+                input_dim=self.input_dim, 
+                output_dim=self.output_dim, 
+                hidden_dims=self.hidden_dims, 
+                activation=self.activation,
+                initialization=self.initialization,
+                embed=self.embed,
+                reparam=self.reparam,
+                nondim=self.nondim,
+                polar=self.polar,
+                only_polar=self.only_polar
+                )(input, transform=transform)
+        res = MLP(name=self.name+"_res",
+                  input_dim=self.input_dim,
+                  output_dim=self.output_dim,
+                  hidden_dims=[16 for _ in self.hidden_dims],
+                  activation=self.activation,
+                  initialization=self.initialization,
+                  embed=self.embed,
+                  reparam=self.reparam,
+                  nondim=self.nondim,
+                  polar=self.polar,
+                  only_polar=self.only_polar
+                  )(input, transform=transform)
+
+        # Constrain network to 0 on boundary of [-10, 10] x [-10, 10]
+        C_xx = (0.1*y[0]-1.)**3 * (0.1*y[0]+1.)**3
+        C_yy = (0.1*y[1]-1.)**3 * (0.1*y[1]+1.)**3
+
+        # Add function such that dyy = 10, and add residual net
+        return x*C_xx*C_yy + 5 * y[1]**2 + res
+
+
+class DoubleModifiedAnsatzMLP(nn.Module):
+    name: str
+    input_dim: int
+    output_dim: int
+    hidden_dims: Sequence[int]
+    activation: Sequence[Callable]
+    initialization: Sequence[Callable]
+    embed: dict | None = None
+    reparam: dict | None = None
+    nondim: float | None = None
+    polar: bool = False
+    only_polar: bool = False
+    activate_last_layer: bool = False
+        
+    @nn.compact
+    def __call__(self, input, transform = None):
+        phi = BiharmonicModifiedAnsatzMLP(name=self.name+"_phi", 
+                           input_dim=self.input_dim, 
+                           output_dim=self.output_dim, 
+                           hidden_dims=self.hidden_dims, 
+                           activation=self.activation,
+                           initialization=self.initialization,
+                           embed=self.embed,
+                           reparam=self.reparam,
+                           nondim=self.nondim,
+                           polar=self.polar,
+                           only_polar=self.only_polar
+                           )(input, transform=transform)
+        
+        psi = ModifiedMLP(name=self.name+"_psi",
+                           input_dim=self.input_dim, 
+                           output_dim=self.output_dim, 
+                           hidden_dims=self.hidden_dims, 
+                           activation=self.activation,
+                           initialization=self.initialization,
+                           embed=self.embed,
+                           reparam=self.reparam,
+                           nondim=self.nondim,
+                           polar=self.polar,
+                           only_polar=self.only_polar
+                           )(input, transform=transform)
+        return jnp.array([phi, psi])
 
 
 class ResNetBlock(nn.Module):
@@ -526,6 +718,7 @@ class DualMLP(nn.Module):
     nondim: float | None = None
     polar: bool = False
     only_polar: bool = False
+    activate_last_layer: bool = False
     
     @nn.compact
     def __call__(self, xy):
@@ -586,9 +779,25 @@ def setup_network(network_settings: dict[str, str | dict]) -> MLP | ResNetBlock:
             parsed_settings = parse_MLP_settings(network_settings["specifications"])
             return DoubleMLP(**parsed_settings)
 
+        case "doubleansatz":
+            parsed_settings = parse_MLP_settings(network_settings["specifications"])
+            return DoubleAnsatzMLP(**parsed_settings)
+
+        case "doublemodified":
+            parsed_settings = parse_MLP_settings(network_settings["specifications"])
+            return DoubleModifiedMLP(**parsed_settings)
+
         case "ansatz":
             parsed_settings = parse_MLP_settings(network_settings["specifications"])
             return BiharmonicAnsatzMLP(**parsed_settings)
+        
+        case "modifiedansatz":
+            parsed_settings = parse_MLP_settings(network_settings["specifications"])
+            return BiharmonicModifiedAnsatzMLP(**parsed_settings)
+
+        case "doublemodifiedansatz":
+            parsed_settings = parse_MLP_settings(network_settings["specifications"])
+            return DoubleModifiedAnsatzMLP(**parsed_settings)
         
         case _:
             raise ValueError(f"Invalid network architecture: '{arch}'.")

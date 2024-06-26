@@ -2,8 +2,6 @@ import sys
 import argparse
 import json
 
-import jax.numpy as jnp
-
 
 def load_json(path: str) -> dict:
     try:
@@ -36,9 +34,20 @@ if __name__ == "__main__":
     print(str(mainfilepath))
     
     pinn = PINN01(raw_settings)
+    pinn.sample_eval_points()
+    pinn.load_model()
+    pinn.plot_results()
+    
+    f = open(pinn.dir.log_dir.joinpath('eval_error.dat'), "w")
 
-    with open(pinn.dir.log_dir.joinpath('all_losses.npy'), "rb") as f:
-        loss_history = jnp.load(f)
-    loss_names = ["Domain", "Lower boundary", "Right boundary", "Upper boundary", "Left boundary", "Circle"]
-    all_losses = jnp.array([loss_history[:,0]] + [loss_history[:, i] + loss_history[:, i+1] for i in [1, 3, 5, 7, 9]]).transpose()
-    pinn.plot_loss(all_losses, {f"{loss_name}": key for key, loss_name in enumerate(loss_names)}, fig_dir=pinn.dir.figure_dir, name="losses", epoch_step=pinn.logging.log_every)
+    for metric_fun in ["mse", "maxabse", "L2rel"]:
+        pinn.eval(metric=metric_fun)
+        
+        f.write(f'{metric_fun} xx error: {pinn.eval_result[metric_fun][0, 0]:.4f}\n')
+        f.write(f'{metric_fun} xy error: {pinn.eval_result[metric_fun][0, 1]:.4f}\n')
+        f.write(f'{metric_fun} yy error: {pinn.eval_result[metric_fun][1, 1]:.4f}\n')
+        
+    for metric_fun in ["mse", "maxabse", "L2rel"]:
+        vm_error = pinn.eval(metric=metric_fun, cartesian=False)
+            
+        f.write(f'{metric_fun} vm_stress error: {vm_error:.4f}\n')

@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import jax.tree_util as jtu
 import optax
 from torch.utils.tensorboard import SummaryWriter
+from matplotlib import rc
 
 from .base import Model
 from .networks import setup_network
@@ -114,11 +115,24 @@ class PINN(Model):
     
     @timer
     def plot_training_points(self, save=True, log=False, step=None):
+        
+        rc("text", usetex=True)
+        rc('text.latex', preamble=r'\usepackage{amsmath}')
+        
         plt.figure()
         _ = jtu.tree_map_with_path(lambda x, y: plt.scatter(np.array(y)[:,0], np.array(y)[:,1], **self.sample_plots.kwargs[x[0].key]), OrderedDict(self.train_points))
         
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        plt.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.04, 1))
+        plt.xlabel("$x$", fontsize=15)
+        plt.ylabel("$y$", fontsize=15)
+        plt.axis('square')
+        plt.xticks([-10,-5,0,5,10])
+        plt.yticks([-10,-5,0,5,10])
+        
         if save:
-            save_fig(self.dir.figure_dir, "training_points.png", "png", plt.gcf())
+            save_fig(self.dir.figure_dir, "training_points", "pdf", plt.gcf())
         
         if log:
             log_figure(fig=plt.gcf(), name="training_points", log_dir=self.dir.log_dir, step=step)

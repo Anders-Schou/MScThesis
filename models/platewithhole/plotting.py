@@ -25,7 +25,7 @@ from utils.transforms import (
 
 _DEFAULT_RADIUS = 2
 _DEFAULT_CIRCLE_RES = 100
-_CLEVELS = 801
+_CLEVELS = 381
 _FONTSIZE = 40
 _LABELSIZE = 40
 _TICKLABELSIZE = 25
@@ -121,6 +121,7 @@ def plot_results(geometry_settings, hessian, params, fig_dir, log_dir, save=True
 
     if save:
         plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=fig_dir, name="Cart_stress", radius=radius, angle=angle)
+        plot_vm_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=fig_dir, name="VM_stress", radius=radius, angle=angle)
         plot_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list, fig_dir=fig_dir, name="Polar_stress")
     if log:        
         log_stress(X, Y, sigma_cart_list, sigma_cart_true_list, log_dir=log_dir, name="Cart_stress", varnames="XY", step=step, dpi=dpi)
@@ -213,6 +214,62 @@ def plot_stress(X, Y, Z, Z_true, *, fig_dir, name,
     save_fig(fig_dir, name, extension)
     plt.clf()
     return
+
+
+def plot_vm_stress(X, Y, Z, Z_true, *, fig_dir, name,
+                extension = "pdf",
+                radius = _DEFAULT_RADIUS,
+                circle_res = _DEFAULT_CIRCLE_RES,
+                angle = None,
+                figsize = (25, 10)):
+    """
+    Function for plotting stresses in cartesian coordinates.
+    """
+    rc("text", usetex=True)
+    rc('text.latex', preamble=r'\usepackage{amsmath}')
+
+    vm_stress = jnp.sqrt(Z[0]**2 + Z[3]**2 - Z[0]*Z[3] + 3*Z[1]**2)
+    vm_stress_true = jnp.sqrt(Z_true[0]**2 + Z_true[3]**2 - Z_true[0]*Z_true[3] + 3*Z_true[1]**2)
+    
+    u = [[vm_stress], [vm_stress_true], [jnp.abs(vm_stress - vm_stress_true)]]
+    
+    all_titles = [[
+        r"Prediction ($\sigma_{\text{v}}$)"
+    ], [
+        r"True solution ($\sigma_{\text{v}}$)"
+    ], [
+        r"Absolute error ($\sigma_{\text{v}}$)"
+    ]]
+
+    include = [0, 2]
+
+    fig, ax = plt.subplots(1, len(include), figsize=figsize, squeeze=False)
+    r = 0
+    for c, cc in enumerate(include):
+        ax[r, c].set_aspect('equal', adjustable='box')
+        ax[r, c].set_title(all_titles[cc][r], fontsize=_FONTSIZE, pad=20)
+        if cc < 2:
+            p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
+        else:
+            p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
+        p.set_edgecolor("face")
+        ax[r, c].set_xlabel(r"$x$", fontsize=_LABELSIZE)
+        ax[r, c].set_ylabel(r"$y$", rotation=0, fontsize=_LABELSIZE)
+        ax[r, c].set_xticks([-10., -5., 0., 5., 10.])
+        ax[r, c].set_yticks([-10., -5., 0., 5., 10.])
+        ax[r, c].set_xticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
+        ax[r, c].set_yticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
+        ax[r, c].add_patch(plt.Circle((0, 0), radius=radius+0.05, color="#777777"))
+        if cc < 2:
+            cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(jnp.min(u[cc][r]), jnp.max(u[cc][r]), 11))
+        else:
+            cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(0, jnp.max(u[cc][r]), 11))
+        cbar.ax.tick_params(labelsize=_TICKLABELSIZE)
+
+    fig.tight_layout(pad=3.0)
+    save_fig(fig_dir, name, extension)
+    plt.clf()
+    return
     
 
 def plot_polar_stress(X, Y, Z, Z_true, *, fig_dir, name, 
@@ -224,14 +281,6 @@ def plot_polar_stress(X, Y, Z, Z_true, *, fig_dir, name,
     
     rc("text", usetex=True)
     rc('text.latex', preamble=r'\usepackage{amsmath}')
-
-    # vmin0 = min(jnp.min(Z_true[0]),jnp.min(Z[0]))
-    # vmin1 = min(jnp.min(Z_true[1]),jnp.min(Z[1]))
-    # vmin3 = min(jnp.min(Z_true[3]),jnp.min(Z[3]))
-    
-    # vmax0 = max(jnp.max(Z_true[0]), jnp.max(Z[0]))
-    # vmax1 = max(jnp.max(Z_true[1]), jnp.max(Z[1]))
-    # vmax3 = max(jnp.max(Z_true[3]), jnp.max(Z[3]))
     
     hess_idx = [0, 1, 3]
 
@@ -289,6 +338,105 @@ def plot_polar_stress(X, Y, Z, Z_true, *, fig_dir, name,
     return
 
 
+
+def plot_true_sol(geometry_settings, hessian, params, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, extension = "pdf", figsize = (30, 30), **kwargs,):
+    
+    X, Y, R, THETA, sigma_cart_list, Z_true, sigma_polar_list, Zp_true = get_plot_data(geometry_settings, hessian, params, grid=grid, **kwargs)
+    radius = geometry_settings["domain"]["circle"]["radius"]
+    angle = geometry_settings["domain"]["circle"].get("angle")
+    
+    rc("text", usetex=True)
+    rc('text.latex', preamble=r'\usepackage{amsmath}')
+
+    hess_idx = [0, 1, 3]
+
+    u = [
+        [Z_true[i] for i in hess_idx],
+        [Zp_true[i] for i in hess_idx],
+    ]
+    all_titles = [[        
+        r"True solution ($\sigma_{xx}$)",
+        r"True solution ($\sigma_{xy}$)",
+        r"True solution ($\sigma_{yy}$)"
+    ], [
+        r"True solution ($\sigma_{rr}$)",
+        r"True solution ($\sigma_{r\theta}$)",
+        r"True solution ($\sigma_{\theta\theta}$)"
+    ]]
+
+    include = [0, 1]
+
+    fig, ax = plt.subplots(len(hess_idx), len(include), figsize=figsize)
+    for r, h in enumerate(hess_idx):
+        for c, cc in enumerate(include):
+            ax[r, c].set_aspect('equal', adjustable='box')
+            ax[r, c].set_title(all_titles[cc][r], fontsize=_FONTSIZE, pad=20)
+            if cc == 0:
+                p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
+            else:
+                p = ax[r, c].contourf(R , THETA, u[cc][r], levels=_CLEVELS, cmap="jet")
+            p.set_edgecolor("face")
+            if cc == 0:
+                ax[r, c].set_xlabel(r"$x$", fontsize=_LABELSIZE)
+                ax[r, c].set_ylabel(r"$y$", rotation=0, fontsize=_LABELSIZE)
+                ax[r, c].set_xticks([-10., -5., 0., 5., 10.])
+                ax[r, c].set_yticks([-10., -5., 0., 5., 10.])
+                ax[r, c].set_xticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
+                ax[r, c].set_yticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
+                ax[r, c].add_patch(plt.Circle((0, 0), radius=radius+0.05, color="#777777"))
+            else:
+                ax[r, c].set_xlabel(r"$r$", fontsize=_LABELSIZE)
+                ax[r, c].set_ylabel(r"$\theta$", rotation=0, fontsize=_LABELSIZE)
+                ax[r, c].set_xticks([2., 4., 6., 8., 10.])
+                ax[r, c].set_yticks([0., 0.5*jnp.pi, jnp.pi, 1.5*jnp.pi, 2.*jnp.pi])
+                ax[r, c].set_xticklabels([r"$2$", r"$4$", r"$6$", r"$8$", r"$10$"], fontsize=_TICKLABELSIZE)
+                ax[r, c].set_yticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"], fontsize=_TICKLABELSIZE)
+            
+            cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(jnp.min(u[cc][r]), jnp.max(u[cc][r]), 11))
+            cbar.ax.tick_params(labelsize=_TICKLABELSIZE)
+
+    fig.tight_layout(pad=3.0)
+    save_fig(fig_dir, "Cart_Polar_true", extension)
+
+    plt.clf()
+    
+    vm_stress_true = jnp.sqrt(Z_true[0]**2 + Z_true[3]**2 - Z_true[0]*Z_true[3] + 3*Z_true[1]**2)
+    
+    u = [[vm_stress_true]]
+         
+    all_titles = [[r"True solution ($\sigma_{\text{v}}$)"]]
+
+    fig, ax = plt.subplots(1, 1, figsize=(15, 10), squeeze=False)
+    r = 0
+    include = [0]
+    for c, cc in enumerate(include):
+        ax[r, c].set_aspect('equal', adjustable='box')
+        ax[r, c].set_title(all_titles[cc][r], fontsize=_FONTSIZE, pad=20)
+        if cc < 2:
+            p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
+        else:
+            p = ax[r, c].contourf(X , Y, u[cc][r], levels=_CLEVELS, cmap="jet")
+        p.set_edgecolor("face")
+        ax[r, c].set_xlabel(r"$x$", fontsize=_LABELSIZE)
+        ax[r, c].set_ylabel(r"$y$", rotation=0, fontsize=_LABELSIZE)
+        ax[r, c].set_xticks([-10., -5., 0., 5., 10.])
+        ax[r, c].set_yticks([-10., -5., 0., 5., 10.])
+        ax[r, c].set_xticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
+        ax[r, c].set_yticklabels([r"$-10$", r"$-5$", r"$0$", r"$5$", r"$10$"], fontsize=_TICKLABELSIZE)
+        ax[r, c].add_patch(plt.Circle((0, 0), radius=radius+0.05, color="#777777"))
+        if cc < 2:
+            cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(jnp.min(u[cc][r]), jnp.max(u[cc][r]), 11))
+        else:
+            cbar = plt.colorbar(p, ax=ax[r, c], ticks=np.linspace(0, jnp.max(u[cc][r]), 11))
+        cbar.ax.tick_params(labelsize=_TICKLABELSIZE)
+
+    fig.tight_layout(pad=3.0)
+    save_fig(fig_dir, "VM_true", extension)
+    
+    plt.clf()
+    return
+
+
 def log_stress(X, Y, Z, Z_true, *, log_dir, name, step=None, varnames="XY", dpi=50):
         
     # Log plots
@@ -328,6 +476,71 @@ def log_stress(X, Y, Z, Z_true, *, log_dir, name, step=None, varnames="XY", dpi=
             
             
 def plot_boundaries(geometry_settings, hessian, params, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, **kwargs):
+        # xlim = geometry_settings["domain"]["rectangle"]["xlim"]
+        # ylim = geometry_settings["domain"]["rectangle"]["ylim"]
+
+        # b0x = jnp.linspace(xlim[0], xlim[1], grid).reshape(-1,1)
+        # b0y = jnp.full_like(b0x, ylim[0])
+        # b0 = jnp.hstack((b0x, b0y))
+        
+        # b1y = jnp.linspace(ylim[0], ylim[1], grid).reshape(-1,1)
+        # b1x = jnp.full_like(b1y, xlim[1])
+        # b1 = jnp.hstack((b1x, b1y))
+        
+        # b2x = jnp.linspace(xlim[1], xlim[0], grid).reshape(-1,1)
+        # b2y = jnp.full_like(b2x, ylim[1])
+        # b2 = jnp.hstack((b2x, b2y))
+
+        # b3y = jnp.linspace(ylim[1], ylim[0], grid).reshape(-1,1)
+        # b3x = jnp.full_like(b3y, xlim[0])
+        # b3 = jnp.hstack((b3x, b3y))
+
+        # x = jnp.concatenate((b0x, b1x, b2x, b3x))
+        # y = jnp.concatenate((b0y, b1y, b2y, b3y))
+        # xy = jnp.concatenate((x, y),axis=1)
+        # u = netmap(hessian)(params, jnp.concatenate((b0, b1, b2, b3))).reshape(-1, 4)
+        
+        # u_true = jax.vmap(analytic.cart_stress_true)(xy, **kwargs).reshape(-1, 4)
+        
+        # fig, ax = plt.subplots(2, 3, figsize=(30, 20))
+        # ax[0, 0].set_title("XX stress", fontsize=_FONTSIZE)
+        # ax[0, 0].plot(u_true[:, 0], linewidth=2)
+        # ax[0, 0].plot(u[:, 0], linewidth=2)
+        # ax[0, 0].vlines([grid, 2*grid, 3*grid], ymin = min(min(u_true[:, 0]), min(u[:, 0])), ymax = max(max(u_true[:, 0]), max(u[:, 0])), colors='black')
+        
+        # ax[0, 1].set_title("XY stress", fontsize=_FONTSIZE)
+        # ax[0, 1].plot(u_true[:, 1], linewidth=2)
+        # ax[0, 1].plot(u[:, 1], linewidth=2)
+        # ax[0, 1].vlines([grid, 2*grid, 3*grid], ymin = min(min(u_true[:, 1]), min(u[:, 1])), ymax = max(max(u_true[:, 1]), max(u[:, 1])), colors='black')
+                
+        # ax[0, 2].set_title("YY stress", fontsize=_FONTSIZE)
+        # ax[0, 2].plot(u_true[:, 3], linewidth=2)
+        # ax[0, 2].plot(u[:, 3], linewidth=2)
+        # ax[0, 2].vlines([grid, 2*grid, 3*grid], ymin = min(min(u_true[:, 3]), min(u[:, 3])), ymax = max(max(u_true[:, 3]), max(u[:, 3])), colors='black')
+        
+        # ax[1, 0].set_title("XX error", fontsize=_FONTSIZE)
+        # ax[1, 0].semilogy(jnp.abs(u_true[:, 0] - u[:, 0]), linewidth=2)
+        # ax[1, 0].vlines([grid, 2*grid, 3*grid], ymin = 0, ymax = max(jnp.abs(u_true[:, 0] - u[:, 0])), colors='black')
+         
+        # ax[1, 1].set_title("XY error", fontsize=_FONTSIZE)
+        # ax[1, 1].semilogy(jnp.abs(u_true[:, 1] - u[:, 1]), linewidth=2)
+        # ax[1, 1].vlines([grid, 2*grid, 3*grid], ymin = 0, ymax = max(jnp.abs(u_true[:, 1] - u[:, 1])), colors='black')
+        
+        # ax[1, 2].set_title("YY error", fontsize=_FONTSIZE)
+        # ax[1, 2].semilogy(jnp.abs(u_true[:, 3] - u[:, 3]), linewidth=2)
+        # ax[1, 2].vlines([grid, 2*grid, 3*grid], ymin = 0, ymax = max(jnp.abs(u_true[:, 3] - u[:, 3])), colors='black')
+        
+        # for i in ax.ravel():
+        #     for item in ([i.xaxis.label, i.yaxis.label] + i.get_xticklabels() + i.get_yticklabels()):
+        #         item.set_fontsize(20)
+        
+        # save_fig(fig_dir, "boundaries", "png")
+        
+        
+        
+        rc("text", usetex=True)
+        rc('text.latex', preamble=r'\usepackage{amsmath}')
+        
         xlim = geometry_settings["domain"]["rectangle"]["xlim"]
         ylim = geometry_settings["domain"]["rectangle"]["ylim"]
 
@@ -338,52 +551,44 @@ def plot_boundaries(geometry_settings, hessian, params, fig_dir, log_dir, save=T
         b1y = jnp.linspace(ylim[0], ylim[1], grid).reshape(-1,1)
         b1x = jnp.full_like(b1y, xlim[1])
         b1 = jnp.hstack((b1x, b1y))
-        
-        b2x = jnp.linspace(xlim[1], xlim[0], grid).reshape(-1,1)
-        b2y = jnp.full_like(b2x, ylim[1])
-        b2 = jnp.hstack((b2x, b2y))
 
-        b3y = jnp.linspace(ylim[1], ylim[0], grid).reshape(-1,1)
-        b3x = jnp.full_like(b3y, xlim[0])
-        b3 = jnp.hstack((b3x, b3y))
-
-        x = jnp.concatenate((b0x, b1x, b2x, b3x))
-        y = jnp.concatenate((b0y, b1y, b2y, b3y))
+        x = jnp.concatenate((b0x, b1x))
+        y = jnp.concatenate((b0y, b1y))
         xy = jnp.concatenate((x, y),axis=1)
-        u = netmap(hessian)(params, jnp.concatenate((b0, b1, b2, b3))).reshape(-1, 4)
         
-        u_true = jax.vmap(analytic.cart_stress_true)(xy, **kwargs).reshape(-1, 4)
+        fig, ax = plt.subplots(2, 2, figsize=(20, 15))
+        ax[0, 0].set_title(r"$\sigma_{xx}$ on $\partial \Omega_{x_\ell}$", fontsize=_FONTSIZE)
+        ax[0, 0].plot(b1y, jax.vmap(analytic.cart_stress_true)(b1, **kwargs)[:, 0, 0], linewidth=2, label='Analytical')
+        ax[0, 0].plot(b1y, jax.vmap(analytic.cart_stress_true)(b1, **kwargs)[:, 0, 0]*0 + 10, '--', linewidth=2, label='Idealized')
+        ax[0, 0].set_ylim(-2, 12)
         
-        fig, ax = plt.subplots(2, 3, figsize=(30, 20))
-        ax[0, 0].set_title("XX stress", fontsize=_FONTSIZE)
-        ax[0, 0].plot(u_true[:, 0], linewidth=2)
-        ax[0, 0].plot(u[:, 0], linewidth=2)
-        ax[0, 0].vlines([grid, 2*grid, 3*grid], ymin = min(min(u_true[:, 0]), min(u[:, 0])), ymax = max(max(u_true[:, 0]), max(u[:, 0])), colors='black')
+        ax[0, 1].set_title(r"$\sigma_{xy}$ on $\partial \Omega_{x_\ell}$", fontsize=_FONTSIZE)
+        ax[0, 1].plot(b1y, jax.vmap(analytic.cart_stress_true)(b1, **kwargs)[:, 0, 1], linewidth=2, label='Analytical')
+        ax[0, 1].plot(b1y, jax.vmap(analytic.cart_stress_true)(b1, **kwargs)[:, 0, 1]*0, '--', linewidth=2, label='Idealized')
+        ax[0, 1].set_ylim(-2, 12)
+
+        ax[1, 0].set_title(r"$\sigma_{yy}$ on $\partial \Omega_{y_\ell}$", fontsize=_FONTSIZE)
+        ax[1, 0].plot(b0x, jax.vmap(analytic.cart_stress_true)(b0, **kwargs)[:, 1, 1], linewidth=2, label='Analytical')
+        ax[1, 0].plot(b0x, jax.vmap(analytic.cart_stress_true)(b0, **kwargs)[:, 1, 1]*0, '--', linewidth=2, label='Idealized')
+        ax[1, 0].set_ylim(-6, 6)
         
-        ax[0, 1].set_title("XY stress", fontsize=_FONTSIZE)
-        ax[0, 1].plot(u_true[:, 1], linewidth=2)
-        ax[0, 1].plot(u[:, 1], linewidth=2)
-        ax[0, 1].vlines([grid, 2*grid, 3*grid], ymin = min(min(u_true[:, 1]), min(u[:, 1])), ymax = max(max(u_true[:, 1]), max(u[:, 1])), colors='black')
-                
-        ax[0, 2].set_title("YY stress", fontsize=_FONTSIZE)
-        ax[0, 2].plot(u_true[:, 3], linewidth=2)
-        ax[0, 2].plot(u[:, 3], linewidth=2)
-        ax[0, 2].vlines([grid, 2*grid, 3*grid], ymin = min(min(u_true[:, 3]), min(u[:, 3])), ymax = max(max(u_true[:, 3]), max(u[:, 3])), colors='black')
+        ax[1, 1].set_title(r"$\sigma_{xy}$ on $\partial \Omega_{y_\ell}$", fontsize=_FONTSIZE)
+        ax[1, 1].plot(b0x, jax.vmap(analytic.cart_stress_true)(b0, **kwargs)[:, 1, 0], linewidth=2, label='Analytical')
+        ax[1, 1].plot(b0x, jax.vmap(analytic.cart_stress_true)(b0, **kwargs)[:, 1, 0]*0, '--', linewidth=2, label='Idealized')
+        ax[1, 1].set_ylim(-6, 6)
         
-        ax[1, 0].set_title("XX error", fontsize=_FONTSIZE)
-        ax[1, 0].semilogy(jnp.abs(u_true[:, 0] - u[:, 0]), linewidth=2)
-        ax[1, 0].vlines([grid, 2*grid, 3*grid], ymin = 0, ymax = max(jnp.abs(u_true[:, 0] - u[:, 0])), colors='black')
-         
-        ax[1, 1].set_title("XY error", fontsize=_FONTSIZE)
-        ax[1, 1].semilogy(jnp.abs(u_true[:, 1] - u[:, 1]), linewidth=2)
-        ax[1, 1].vlines([grid, 2*grid, 3*grid], ymin = 0, ymax = max(jnp.abs(u_true[:, 1] - u[:, 1])), colors='black')
         
-        ax[1, 2].set_title("YY error", fontsize=_FONTSIZE)
-        ax[1, 2].semilogy(jnp.abs(u_true[:, 3] - u[:, 3]), linewidth=2)
-        ax[1, 2].vlines([grid, 2*grid, 3*grid], ymin = 0, ymax = max(jnp.abs(u_true[:, 3] - u[:, 3])), colors='black')
+        ax[1, 0].set_xlabel(r"$x$", fontsize=_LABELSIZE)
+        ax[1, 0].set_ylabel(r"$y$", rotation=0, fontsize=_LABELSIZE)
+        ax[1, 1].set_xlabel(r"$x$", fontsize=_LABELSIZE)
+        ax[0, 0].set_ylabel(r"$y$", rotation=0, fontsize=_LABELSIZE)
+        for r in range(2):
+            for c in range(2):
+                ax[r, c].set_aspect('equal')
+                ax[r, c].tick_params(labelsize=_TICKLABELSIZE)
+                # ax[r, c].legend(fontsize=_TICKLABELSIZE)
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        fig.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.14, 0.9), fontsize=_LABELSIZE)
         
-        for i in ax.ravel():
-            for item in ([i.xaxis.label, i.yaxis.label] + i.get_xticklabels() + i.get_yticklabels()):
-                item.set_fontsize(20)
-        
-        save_fig(fig_dir, "boundaries", "png")
+        save_fig(fig_dir, "boundaries", "pdf")

@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from . import analytic
 from models.networks import deeponetmap
 from utils.plotting import get_plot_variables
-from models.platewithhole.plotting import plot_stress, plot_polar_stress, log_stress
+from models.platewithhole.plotting import plot_stress, plot_polar_stress, log_stress, plot_vm_stress
 from utils.transforms import (
     cart2polar_tensor,
     xy2r,
@@ -14,8 +14,8 @@ from utils.transforms import (
 )
 
 def get_plot_data(geometry_settings, hessian, params, branch_point, grid, **kwargs):
-    
-    radius = branch_point[0]
+    # Does not work for DeepONet with (radius, tension) as branch - then it should be radius = branch_point[0]
+    radius = geometry_settings["domain"]["circle"]["radius"]
     xlim = geometry_settings["domain"]["rectangle"]["xlim"]
     ylim = geometry_settings["domain"]["rectangle"]["ylim"]
     angle = geometry_settings["domain"]["circle"].get("angle")
@@ -61,11 +61,13 @@ def get_plot_data(geometry_settings, hessian, params, branch_point, grid, **kwar
 def plot_results(geometry_settings, hessian, params, branch_point, fig_dir, log_dir, save=True, log=False, step=None, grid=201, dpi=50, **kwargs):
 
     X, Y, R, THETA, sigma_cart_list, sigma_cart_true_list, sigma_polar_list, sigma_polar_true_list = get_plot_data(geometry_settings, hessian, params, branch_point, grid=grid, **kwargs)
-    radius = branch_point[0]
+    # Does not work for DeepONet with (radius, tension) as branch - then it should be radius = branch_point[0]
+    radius = geometry_settings["domain"]["circle"]["radius"]
     angle = geometry_settings["domain"]["circle"].get("angle")
 
     if save:
         plot_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=fig_dir, name="Cart_stress", radius=radius, angle=angle)
+        plot_vm_stress(X, Y, sigma_cart_list, sigma_cart_true_list, fig_dir=fig_dir, name="VM_stress", radius=radius, angle=angle)
         plot_polar_stress(R, THETA, sigma_polar_list, sigma_polar_true_list, fig_dir=fig_dir, name="Polar_stress")
     if log:        
         log_stress(X, Y, sigma_cart_list, sigma_cart_true_list, log_dir=log_dir, name="Cart_stress", varnames="XY", step=step, dpi=dpi)

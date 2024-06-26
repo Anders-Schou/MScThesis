@@ -85,6 +85,12 @@ def get_gpu_model():
     return line.strip()
 
 
+def find_nearest(array, value):
+    array = jnp.asarray(array)
+    idx = (jnp.abs(array - value)).argmin()
+    return array[idx]
+
+
 class WaveletActivation(nn.Module):
     param_scale: float = 1.0
 

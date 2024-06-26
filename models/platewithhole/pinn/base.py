@@ -293,6 +293,33 @@ class PlateWithHolePINN(PINN):
             self.plot_training_points()
             
         return
+    
+    def sample_eval_points(self):
+        self._key, train_key, eval_key, dataset_key = jax.random.split(self._key, 4)
+        radius = self.geometry_settings["domain"]["circle"]["radius"]
+        xlim = self.geometry_settings["domain"]["rectangle"]["xlim"]
+        ylim = self.geometry_settings["domain"]["rectangle"]["ylim"]
+        dt = self.geometry_settings["domain"]["type"]
+        eval_sampling = self.eval_settings.sampling if self.do_eval is not None else None
+        self.define_plot_geometry()
+
+        self.eval_points = generate_rectangle_with_hole(eval_key, radius, xlim, ylim,
+                                                        [5000, 200],
+                                                        [50, 50, 50, 50],
+                                                        200,
+                                                        domain_type=dt)
+        
+        # Keys for data points
+        self._key, data_train_key, data_eval_key = jax.random.split(self._key, 3)
+
+        self.eval_points["data"] = generate_collocation_points_with_hole(data_eval_key, radius,
+                                                                         xlim, ylim, eval_sampling.get("data"),
+                                                                         domain_type=dt)
+
+        # Get corresponding function values
+        self.eval_true_val = analytic.get_true_vals(self.eval_points, ylim=ylim)
+
+        return
 
     def define_plot_geometry(self):
         dt = self.geometry_settings["domain"]["type"].lower()
@@ -397,7 +424,7 @@ class PlateWithHolePINN(PINN):
         self.train_true_val["coll"] = analytic.get_true_vals(self.train_points, exclude=["rect", "circ", "diri", "data"])["coll"]
         return
     
-    def eval(self, point_type: str = "coll", metric: str  = "L2-rel", **kwargs):
+    def eval(self, cartesian: bool = True, point_type: str = "coll", metric: str  = "L2-rel", **kwargs):
         """
         Evaluates the Cartesian stresses using the specified metric.
         """
@@ -419,20 +446,27 @@ class PlateWithHolePINN(PINN):
 
         u = jnp.squeeze(netmap(self.jitted_hessian)(self.params, self.eval_points[point_type]))
         u = jax.vmap(phi2sigma)(u)
-        u_true = jax.vmap(partial(analytic.cart_stress_true, **kwargs))(self.eval_points[point_type])
+        
+        if cartesian:
+            u_true = jax.vmap(partial(analytic.cart_stress_true, **kwargs))(self.eval_points[point_type])
 
-        err = jnp.array([[metric_fun(u[:, i, j], u_true[:, i, j]) for i in range(2)] for j in range(2)])
+            err = jnp.array([[metric_fun(u[:, i, j], u_true[:, i, j]) for i in range(2)] for j in range(2)])
 
-        attr_name = "eval_result"
+            attr_name = "eval_result"
 
-        if hasattr(self, attr_name):
-            if isinstance(self.eval_result, dict):
-                self.eval_result[metric] = err
+            if hasattr(self, attr_name):
+                if isinstance(self.eval_result, dict):
+                    self.eval_result[metric] = err
+                else:
+                    raise TypeError(f"Attribute '{attr_name}' is not a dictionary. "
+                                    f"Evaluation error cannot be added.")
             else:
-                raise TypeError(f"Attribute '{attr_name}' is not a dictionary. "
-                                f"Evaluation error cannot be added.")
+                self.eval_result = {metric: err}
         else:
-            self.eval_result = {metric: err}
+            vm_stress_true = jax.vmap(partial(analytic.von_mises_stress_true, **kwargs))(self.eval_points[point_type])
+            vm_stress = jnp.sqrt(u[:, 0, 0]**2 + u[:, 1, 1]**2 - u[:, 0, 0]*u[:, 1, 1] + 3*u[:, 0, 1]**2)
+
+            err = metric_fun(vm_stress, vm_stress_true)
         
         return err
     
@@ -444,6 +478,11 @@ class PlateWithHolePINN(PINN):
         
     def plot_boundaries(self, save=True, log=False, step=None):
         pwhplot.plot_boundaries(self.geometry_settings_plotting, self.jitted_hessian, self.params, 
+                             self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step, 
+                             grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"])
+
+    def plot_true_sol(self, save=True, log=False, step=None):
+        pwhplot.plot_true_sol(self.geometry_settings_plotting, self.jitted_hessian, self.params, 
                              self.dir.figure_dir, self.dir.log_dir, save=save, log=log, step=step, 
                              grid=self.plot_settings["grid"], dpi=self.plot_settings["dpi"])
         
