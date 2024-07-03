@@ -1,5 +1,5 @@
-# MScThesis
-This repository is used for the MSc thesis.
+# JAX implementation of PINNs for solving the biharmonic equation
+This repository contains code used in a MSc thesis project.
 
 ## Dependencies
 - `python-3.12.1`
