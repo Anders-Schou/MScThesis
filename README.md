@@ -1,4 +1,4 @@
-# JAX implementation of PINNs for solving the biharmonic equation
+# JAX implementation of PINNs for solving the biharmonic equation arising from the equations of linear elasticity
 This repository contains code used in a MSc thesis project.
 
 ## Dependencies
